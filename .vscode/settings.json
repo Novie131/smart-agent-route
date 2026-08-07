@@ -1,0 +1,5 @@
+{
+  "files.exclude": { "**/.DS_Store": true },
+  "markdown.preview.breaks": true,
+  "explorer.sortOrder": "type"
+}
