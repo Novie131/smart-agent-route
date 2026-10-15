@@ -1,8 +1,8 @@
-# tiered-agents 架構 spec
+# smart-agent-route 架構 spec
 
 ## 目標
 
-主對話用 Opus 思考與判斷,執行工作派給較便宜的模型,並讓知識跨對話累積。
+主對話用 Opus 思考與判斷,執行工作派給較便宜的模型;主對話保持短,要留下的寫進記憶,對話可以隨時清空;知識跨對話累積。
 
 ## 架構
 
@@ -10,8 +10,14 @@
 你 ──► 主對話(Opus)          ← 大門。理解、判斷、決定派給誰
           │
           ├──► worker(Sonnet)     ← 方向已定、動手做的事
-          ├──► librarian(Haiku)   ← 查資料。唯讀
+          │      └► worker-hard    ← worker 失敗後的升級
+          ├──► bulk(Haiku)        ← 大量讀取只要結論
+          ├──► librarian(Haiku)   ← 查知識庫。唯讀
+          ├──► Explore(Haiku)     ← 搜程式碼。使用者層級,需另裝
           └──► harvester(Sonnet)  ← 挖歷史對話進知識庫。手動觸發
+
+hook :SessionStart 帶入分工慣例、記憶索引、交接筆記;UserPromptSubmit 在 context 過長時提醒
+skill:handoff 寫交接筆記;research 查外部資料、附來源、存筆記
 ```
 
 **路由發生在 Opus 之後,不是之前。** 判斷意圖就得先讀懂訊息,而讀懂即規劃。所以 Opus 永遠是入口,由它派工。
@@ -23,24 +29,33 @@
 | 元件 | 模型 | 工具 | 職責 |
 |---|---|---|---|
 | 主對話 | Opus | 全部 | 規劃、判斷、派工 |
-| `worker` | Sonnet | 讀寫檔案、Bash、網頁 | 執行明確任務,收工寫記憶 |
-| `librarian` | Haiku | **唯讀**(Read/Glob/Grep) | 在知識庫檢索,回傳原文片段 |
+| `worker` | Sonnet medium | 讀寫檔案、Bash、網頁 | 執行明確任務,必須驗證,收工寫記憶 |
+| `worker-hard` | Sonnet high | 同 worker | worker 失敗後接手,先分析前次失敗原因 |
+| `bulk` | Haiku medium | 讀寫檔案、Bash、網頁 | 看圖、讀長 log、抓網頁、規則明確的批次修改;只回結論 |
+| `librarian` | Haiku low | **唯讀**(Read/Glob/Grep) | 在知識庫檢索,回傳原文片段 |
 | `harvester` | Sonnet | 繼承 | 讀過往 session,萃取成筆記 |
+| `Explore`(範本) | Haiku | 唯讀 | 搜程式碼。須放 `~/.claude/agents/` 才能覆蓋內建版 |
+| `handoff` skill | — | — | 寫 `handoff.md`(四段、只記現況、≤60 行) |
+| `research` skill | — | — | 查外部資料、附來源、存 `web/` 筆記 |
 
-`worker` 與 `librarian` 設 `effort: low` 降低推理成本。品質不足時第一個拿掉的就是它。
+worker 從 0.6 的 `low` 改為 `medium`:執行層做錯由主對話收拾的成本,高於推理省下的 token;升級鏈只在失敗時才付 `high`。
 
 ## 記憶
 
 ```
 <你的資料夾>/claude-memory/
-├── MEMORY.md    ← 常駐索引,每次自動注入,預算 40 行
+├── MEMORY.md    ← 常駐索引,session 開始時由 hook 帶入主對話,預算 40 行
+├── handoff.md   ← 交接筆記,只記現況;下個 session 自動帶入
 ├── topics/      ← agent 累積的知識(可隨時砍掉重來)
-└── kb/          ← 你自己的筆記(agent 不該改)
+├── kb/          ← 你自己的筆記(agent 不該改)
+└── web/         ← 外部資料筆記,附來源與 fetched 日期,依 volatility 過期
 ```
 
 **MEMORY.md 只放觸發條件,知識本體放主題檔。**
 
-這讓成本跟「這次用得到多少」成正比,而非「總共記得多少」——知識可無限成長,固定成本不變。系統只注入前 200 行,膨脹即截斷。
+這讓成本跟「這次用得到多少」成正比,而非「總共記得多少」——知識可無限成長,固定成本不變。hook 只帶入前 120 行(略過 HTML 註解與空行),膨脹即截斷。
+
+**帶入靠 SessionStart hook,不靠 CLAUDE.md。** plugin 改不了使用者的 CLAUDE.md,plugin 根目錄的 CLAUDE.md 也不會載入;SessionStart 的純文字 stdout 會成為 context(官方 hooks 文件)。hook 讀的是 `$CLAUDE_PROJECT_DIR/claude-memory/`。
 
 索引寫成條件,不是主題:
 
@@ -59,14 +74,20 @@
 
 ## 省 token 的四個槓桿
 
-1. **Context 隔離**(最大,且是複利)。對話中每則訊息在後續每一輪都會重送。30 次工具呼叫留在主對話 = 被反覆計費到對話結束;派給 subagent 則主對話只收摘要。→ **整包派工,不要一件一件派**,每次啟動 subagent 都要重付系統提示與記憶注入。
+0. **對話長度**(實測最大)。21 個 session、約 2,000 次呼叫的實測:主對話每次呼叫的 context 中位數約 24 萬 token,快取讀取約 4.9 億 vs 輸出 240 萬——錢花在每輪重讀舊對話。→ hook 在 12 萬 token 時提醒、之後每 4 萬再提醒;handoff skill 寫下現況後 `/clear`;建議另設 `autoCompactWindow: 200000` 當保險。
+1. **Context 隔離**(複利)。對話中每則訊息在後續每一輪都會重送。30 次工具呼叫留在主對話 = 被反覆計費到對話結束;派給 subagent 則主對話只收摘要。→ **整包派工,不要一件一件派**,每次啟動 subagent 都要重付系統提示與記憶注入。
 2. **模型分層**。線性效果,省的比例約等於價差比例。
-3. **`effort: low`**。砍推理階段 token。品質不足時第一個拿掉。
-4. **主對話別開太久**。Opus 掛長對話,整段歷史每輪重送。換題目就開新對話。
+3. **`effort`**。librarian `low`、worker `medium`、worker-hard `high`。依失敗代價配置,不是一律壓低。
 
 ## 關鍵設計決策
 
 **沒有 planner subagent** — 主對話本身就是 planner,多一層只是多一次轉手。
+
+**失敗升級有上限** — 補背景重派 → bulk 改 worker → worker 改 worker-hard(附失敗報告)→ 停下重新規劃或問使用者。不設上限的升級會在規劃錯誤時一路燒錢。
+
+**Explore 不放進 plugin** — 官方文件:只有使用者或專案層級名為 `Explore` 的 agent 能覆蓋內建版;plugin agent 優先順序最低。主對話是 Opus 時內建 Explore 也跑 Opus,所以以範本 + `install.sh --with-explore` 提供。
+
+**context 提醒用 python、安靜失敗** — 要解析 transcript 的 usage,純 sh 不可靠。`run-python.sh` 找不到可用的 python3 就跳過(macOS 未裝 Command Line Tools 時 `/usr/bin/python3` 會跳安裝視窗,先用 `xcode-select -p` 判斷);腳本任何錯誤都不擋使用者訊息。
 
 **Haiku 層預設只開檢索** — Haiku 的風險是「安靜地做錯」。檢索是例外:唯讀改不壞東西、成功標準明確、省得最多。其他 Haiku 用途需綁定具體任務後才啟用(見 plugin 內 `templates/runner.md.example`)。
 
@@ -78,32 +99,46 @@
 
 # 實作附錄
 
-> 依此附錄可從零重建整個 plugin,不需要原始檔案。
+> 依此附錄可重建 worker、librarian、harvester 與記憶範本。0.7 新增的元件(worker-hard、bulk、skills、hooks)規格見「0.7 新增元件」一節,細節以檔案為準。
 
 ## 目錄結構
 
 ```
-tiered-agents/
+smart-agent-route/
 ├── .claude-plugin/plugin.json    ← 只有 manifest 放這裡
 ├── agents/
 │   ├── worker.md
+│   ├── worker-hard.md
+│   ├── bulk.md
 │   ├── librarian.md
 │   └── harvester.md
+├── skills/
+│   ├── handoff/SKILL.md
+│   └── research/SKILL.md
+├── hooks/
+│   ├── hooks.json          ← 最外層必須包一層 "hooks" 鍵,否則載入失敗
+│   ├── session-start.sh    ← 純 sh + awk
+│   ├── guide.md            ← session-start.sh 輸出的分工慣例
+│   ├── run-python.sh       ← 找不到可用 python3 就安靜跳過
+│   └── context-check.py
 └── templates/
     ├── MEMORY.md
     ├── KNOWLEDGE-BASE.md
+    ├── Explore.md          ← 使用者層級才生效,不會被 plugin 載入
     └── runner.md.example
 ```
 
-`agents/`、`templates/` 必須在 plugin 根目錄,**不可放進 `.claude-plugin/`**。
+`agents/`、`skills/`、`hooks/`、`templates/` 必須在 plugin 根目錄,**不可放進 `.claude-plugin/`**。
+
+plugin 內的元件都帶命名空間:agent 是 `smart-agent-route:worker`,skill 是 `/smart-agent-route:handoff`。
 
 `plugin.json`:
 
 ```json
 {
-  "name": "tiered-agents",
-  "description": "分層委派架構:Opus 規劃、Sonnet 執行、Haiku 檢索。",
-  "version": "0.6.0"
+  "name": "smart-agent-route",
+  "description": "分層委派架構:Opus 規劃、Sonnet 執行、Haiku 檢索與大量讀取,搭配 context 長度提醒與交接筆記…",
+  "version": "0.8.0"
 }
 ```
 
@@ -119,7 +154,8 @@ description: 執行已經想清楚的工作。當任務的「做什麼」已經�
 tools: Read, Write, Edit, Glob, Grep, Bash, WebFetch, WebSearch
 model: sonnet
 memory: user
-effort: low
+effort: medium
+maxTurns: 30
 color: blue
 ```
 
@@ -258,10 +294,28 @@ claude-memory/
 
 ---
 
+## 0.7 新增元件
+
+**worker-hard**(Sonnet、`effort: high`、`maxTurns: 40`)— 只在 worker 失敗後派,委派時附前次失敗報告。先分析失敗原因(方法錯/資訊不足/規劃有問題),不重複已失敗的方法;判斷是規劃問題就停下回報。收工把「前次為什麼失敗」寫進記憶的已知的坑。
+
+**worker 的新增指令** — 完成後必須驗證;同一問題 3 次失敗即停;回報格式:做了什麼 / 驗證方式與結果 / 未解決與已嘗試的方法。
+
+**bulk**(Haiku、`effort: medium`、`maxTurns: 20`、`omitClaudeMd: true`)— 嚴格照委派執行、不擴大範圍、不寫記憶;大檔先 grep/head/tail;只回結論並附證據(網址、路徑與行號、關鍵原文),推測要標明。`omitClaudeMd` 需 Claude Code 2.1.271 以上。
+
+**handoff skill** — 位置依序:`claude-memory/handoff.md` → auto memory 目錄(並在其 `MEMORY.md` 留指向)→ 都沒有就告知使用者。四段固定格式:目前任務 / 已完成與已修改的檔案 / 下一步 / 未決問題與使用者做過的決定。只記現況、改寫不追加、≤60 行。
+
+**research skill** — 先查 `web/INDEX.md`;官方來源優先;文件站先試 `llms.txt`;抓網頁派給 bulk 只回「結論 + 網址 + 章節 + 短引文」;結尾附參考來源。存檔分級:官方 + stable/product 直接存並告知;非官方或矛盾先問;live 資訊不存。過期:stable 180 天、product 30 天,過期則更新原筆記。
+
+**SessionStart hook**(matcher `startup|clear|compact`)— 輸出 `guide.md`,再附 `claude-memory/MEMORY.md`(≤120 行)與 `handoff.md`(≤80 行),兩者都略過 HTML 註解與空行。`resume` 不觸發,因為恢復的對話已含先前帶入的內容。
+
+**UserPromptSubmit hook** — 從 `transcript_path` 讀主對話(排除 sidechain)最後一次呼叫的 input + cache 讀寫 token;以 12 萬為門檻、每 4 萬一格,「上次在哪一格」記在 `${CLAUDE_PLUGIN_DATA}/.context-check-state.json`(只比最後兩次呼叫會漏掉回合中途跨門檻的情況)。跨進新的一格才以 `additionalContext` 提醒一次,文字用陳述語氣。
+
 ## 已知限制
 
 - plugin 跨對話,記憶跟著資料夾走。Cowork 忘了連接資料夾等於失憶。
-- 委派靠 description 匹配,非保證。要確定用 `@agent-worker`。
+- 委派靠 description 匹配,非保證。要確定用 `@agent-smart-agent-route:worker`。
+- hook 在 Cowork 是否執行、`CLAUDE_PROJECT_DIR` 是否指向連接資料夾,未驗證。
+- 使用者若已在 `~/.claude/` 自設同類 hook 或 CLAUDE.md 分工規則,會重複提醒。
 - `MEMORY.md` 會腐化,需定期整理。超過 150 行或出現已不成立的敘述即是訊號。
 - `harvester` 只看得到本機 session,網頁與手機的對話不在範圍內。
 - 記憶注入本身是固定成本,與省 token 有張力。靠「常駐區保持薄」化解。

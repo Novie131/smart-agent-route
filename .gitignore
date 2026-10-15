@@ -2,3 +2,4 @@
 *.plugin
 claude-memory/
 .obsidian/
+__pycache__/

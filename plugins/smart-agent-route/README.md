@@ -1,6 +1,6 @@
-# tiered-agents
+# smart-agent-route
 
-分層委派:**主對話用 Opus 思考,執行派給 Sonnet,已驗證的重複流程再降到 Haiku。**
+分層委派:**主對話用 Opus 思考,執行派給 Sonnet,檢索與大量讀取交給 Haiku**;再加上 context 長度提醒與交接筆記,讓主對話可以放心保持短。
 
 ---
 
@@ -15,13 +15,16 @@
 ```
 你 ──► 主對話(Opus)  ← 永遠是大門,負責理解與判斷
             │
-            ├──► worker(Sonnet)     ← 方向已定、動手做的事
-            │
-            ├──► librarian(Haiku)   ← 查資料。唯讀,讀得廣回得精
-            │
-            ├──► harvester(Sonnet)  ← 把歷史對話挖進知識庫(手動觸發)
-            │
-            └──► 你自訂的 Haiku agent ← 已驗證的固定流程(預設留空)
+            ├──► worker(Sonnet medium)  ← 方向已定、動手做的事
+            │      └► worker-hard(Sonnet high) ← worker 失敗後的升級
+            ├──► bulk(Haiku)              ← 大量讀取只要結論:圖片、長 log、網頁
+            ├──► librarian(Haiku)         ← 查知識庫。唯讀,讀得廣回得精
+            ├──► Explore(Haiku,選裝)      ← 搜程式碼。需另裝到 ~/.claude/agents/
+            ├──► harvester(Sonnet)        ← 把歷史對話挖進知識庫(手動觸發)
+            └──► 你自訂的 Haiku agent       ← 已驗證的固定流程(預設留空)
+
+  skill:handoff(寫交接筆記)、research(查外部資料並附來源)
+  hook :SessionStart(帶入分工慣例、記憶索引、交接筆記)、UserPromptSubmit(context 過長時提醒)
 ```
 
 **判斷該找誰的人,是那個已經理解任務的人。**
@@ -35,8 +38,22 @@
 ### 1. 安裝 plugin
 
 ```
-/plugin install tiered-agents
+/plugin install smart-agent-route --marketplace Novie131/smart-agent-route
 ```
+
+(Claude Code 2.1.275 以前的版本先 `/plugin marketplace add Novie131/smart-agent-route`,再 `/plugin install smart-agent-route@smart-agent-route`。)
+
+context 長度提醒需要 `python3`;沒有的話這個 hook 會安靜停用,其餘功能照常。
+
+### 1.5(建議)搜程式碼也改用 Haiku
+
+主對話是 Opus 時,內建的 Explore 也跑 Opus。**plugin 裡的 agent 蓋不掉內建 Explore**——官方文件寫明只有使用者或專案層級、名為 `Explore` 的 agent 才能覆蓋。所以這一步要手動:
+
+```bash
+cp templates/Explore.md ~/.claude/agents/Explore.md   # 或 bash install.sh --with-explore
+```
+
+已經有自己的 `Explore.md` 就不用做。
 
 ### 2. 把主對話設成 Opus
 
@@ -70,7 +87,7 @@ plugin 本身裝一次就到處都在(它在使用者層級,不綁對話)。但*
 **做法:選一個你自己的資料夾當記憶庫**(建議直接開一個新的、專用的),在裡面建 `claude-memory/`:
 
 ```bash
-mkdir -p <你的資料夾>/claude-memory/{topics,kb}
+mkdir -p <你的資料夾>/claude-memory/{topics,kb,web}
 cp templates/MEMORY.md <你的資料夾>/claude-memory/MEMORY.md
 ```
 
@@ -108,7 +125,14 @@ cp templates/MEMORY.md <你的資料夾>/claude-memory/MEMORY.md
 - 「幫我想清楚 X 該怎麼做」→ 留在 Opus
 - 「照剛才講的做」→ 派給 worker
 - 「我之前有記過 X 嗎」「筆記裡有沒有提過 Y」→ 派給 librarian
-- 「@agent-worker 做 X」→ 強制指定
+- 「看一下這 18 張截圖有沒有跑版」「這份 log 為什麼失敗」→ 派給 bulk
+- 「這個 API 新版怎麼設定」→ research skill,回答附來源,官方資料存進 `claude-memory/web/`
+- 「交接一下」或 hook 提醒 context 過長 → handoff skill 寫 `handoff.md`,之後可以 `/clear`
+- 「@agent-smart-agent-route:worker 做 X」→ 強制指定
+
+主對話怎麼分工,不靠你的 CLAUDE.md:plugin 的 SessionStart hook 會在每個 session 開始時把分工表帶進去(內容見 `hooks/guide.md`)。
+
+**失敗升級**依序:補背景後同一個 agent 重派 → bulk 失敗改 worker → worker 失敗改 worker-hard(附前次失敗報告)→ 仍失敗就停下來重新規劃或問你。不會無限升級。
 
 ---
 
@@ -195,13 +219,21 @@ Haiku 層是唯一真正省錢、也唯一真正有風險的一層——它不�
 
 **3. `effort` 等級**
 
-worker 預設 `effort: low`,直接砍掉推理階段的 token。對「方向已定、只是動手」的工作通常不影響品質。
+worker 用 `effort: medium`,搭配「完成後必須驗證」與失敗升級到 worker-hard(`high`)。librarian 用 `low`(純檢索)。
 
-> 這是**第一個該拿掉的東西**。如果你發現 worker 開始做得毛躁、漏步驟、或需要你反覆補充,就把 `agents/worker.md` 裡的 `effort: low` 刪掉(刪掉就回到跟隨 session 設定)。省 token 不值得換一個要你收拾的執行層。
+> 0.6 版 worker 是 `low`。改成 `medium` 的理由:執行層做錯的代價是主對話要收拾,而升級鏈只在失敗時才付 `high` 的錢。想更省可以改回 `low`,但先觀察 worker 有沒有開始毛躁、漏步驟。
 
-**4. 主對話別開太久**
+**4. 主對話別開太久(plugin 會幫你盯)**
 
-Opus 掛著一段長對話是最安靜的漏斗——整段歷史每輪重送一次。換題目時開新對話,比任何架構優化都有效。
+Opus 掛著一段長對話是最安靜的漏斗——整段歷史每輪重送一次。實測一個重度使用者 21 個 session:主對話每次呼叫的 context 中位數約 24 萬 token,其中絕大部分是在重讀舊對話。
+
+所以這一項不只靠自覺:
+
+- **UserPromptSubmit hook** 在 context 超過 12 萬 token 時提醒一次,之後每多 4 萬再提醒(門檻可用環境變數 `CONTEXT_REMIND_TOKENS` 調整)
+- 提醒時 Claude 會用 **handoff skill** 把現況寫進 `handoff.md`(目前任務 / 已完成 / 下一步 / 未決問題),再建議你 `/clear`
+- 新 session 開始時 **SessionStart hook** 自動帶入 `claude-memory/handoff.md`,直接接手
+
+建議另外在 `~/.claude/settings.json` 把自動壓縮當保險(plugin 不能代設):`"autoCompactWindow": 200000`。
 
 ---
 
@@ -215,7 +247,7 @@ Opus 掛著一段長對話是最安靜的漏斗——整段歷史每輪重送一
 
 這代表「保持 MEMORY.md 薄」有兩個理由,而且方向一致:
 
-- 超過 200 行會被截斷,你就不知道自己知道什麼
+- 超過上限會被截斷(hook 帶入 120 行、auto memory 200 行),你就不知道自己知道什麼
 - 常駐內容是每個 session 都付的固定成本
 
 範本裡的 40 行預算就是照這個訂的。維護它不是潔癖,是這套架構的運轉條件。
@@ -228,7 +260,11 @@ Opus 掛著一段長對話是最安靜的漏斗——整段歷史每輪重送一
 
 **為什麼記憶優先放連接資料夾,而不是靠 `memory:` 欄位。** `memory:` 欄位的三個位置(`user` / `project` / `local`)路徑是寫死的,不能指定。而 Cowork 的沙盒家目錄每個 session 重建,寫進去等於丟掉。改成優先用你自己指定的資料夾,就同時解決了跨對話持久化、跨環境一致、以及 Obsidian 檢視這三件事。`memory: user` 保留當退路,在終端機的 Claude Code 裡仍然有效。
 
-**為什麼 MEMORY.md 是索引不是筆記本。** 系統只注入前 200 行,膨脹就截斷。保持它薄是它能運作的前提。
+**為什麼 MEMORY.md 是索引不是筆記本。** 它每個 session 都被帶入(hook 最多 120 行,HTML 註解與空行不算),膨脹就截斷。保持它薄是它能運作的前提。
+
+**為什麼用 SessionStart hook 帶入記憶,而不是請你改 CLAUDE.md。** plugin 改不了使用者的 CLAUDE.md,而放在 plugin 根目錄的 CLAUDE.md 不會被載入。hook 的純文字輸出會成為 context,這是 plugin 唯一能影響主對話行為的穩定管道。
+
+**為什麼 Explore 要另外裝。** 官方文件:只有使用者或專案層級名為 `Explore` 的 agent 能覆蓋內建版;plugin 的 agent 優先順序最低。
 
 **為什麼記憶要記「下次怎麼做」而不是「這次做了什麼」。** 流水帳不會讓下一次變快。記憶的價值在於免掉重新判斷,不在於留下痕跡。
 
@@ -237,5 +273,7 @@ Opus 掛著一段長對話是最安靜的漏斗——整段歷史每輪重送一
 ## 已知限制
 
 - **plugin 到處都在,記憶跟著資料夾走。** plugin 裝一次所有對話都能用。但記憶存在你指定的資料夾裡,不在 plugin 裡——在 Cowork 每次開新對話得把那個資料夾連進來,忘了連就等於失憶。這是這套架構目前最容易踩到的坑。
-- **委派靠 description 匹配,不是保證。** 主對話有時會自己動手而不派工。想確定就 `@agent-worker`。
+- **委派靠 description 匹配,不是保證。** 主對話有時會自己動手而不派工。想確定就 `@agent-smart-agent-route:worker`。
+- **hook 在 Cowork 的行為未驗證。** agent 與 skill 是標準 plugin 元件;hook 是否在 Cowork 執行、`CLAUDE_PROJECT_DIR` 是否指向連接資料夾,尚未實測。
+- **如果你已經在 `~/.claude/` 自己設過同樣的東西**(context 提醒 hook、bulk agent、CLAUDE.md 裡的分工規則),裝了會重複提醒、重複規則,先移除其中一邊。
 - **`MEMORY.md` 會腐化。** 這不是 bug,是需要你定期花五分鐘的維護項目。腐化的訊號是超過 150 行、或出現已經不成立的敘述。

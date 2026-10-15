@@ -5,15 +5,17 @@
 ```
 <你的資料夾>/
 └── claude-memory/
-    ├── MEMORY.md      ← 常駐索引。每次自動注入,預算 40 行
+    ├── MEMORY.md      ← 常駐索引。session 開始時由 hook 帶入主對話,預算 40 行
+    ├── handoff.md     ← 交接筆記。handoff skill 寫,下個 session 自動帶入
     ├── topics/        ← agent 自己累積的知識
-    └── kb/            ← 你自己放的筆記與參考資料
+    ├── kb/            ← 你自己放的筆記與參考資料
+    └── web/           ← research skill 存的外部資料筆記(INDEX.md + 主題檔)
 ```
 
 建立方式:
 
 ```bash
-mkdir -p <你的資料夾>/claude-memory/{topics,kb}
+mkdir -p <你的資料夾>/claude-memory/{topics,kb,web}
 cp templates/MEMORY.md <你的資料夾>/claude-memory/MEMORY.md
 ```
 
@@ -26,6 +28,8 @@ cp templates/MEMORY.md <你的資料夾>/claude-memory/MEMORY.md
 `kb/` 是你自己的東西——agent 不該改它。這條界線讓你在整理 `topics/` 時可以放心大膽地砍。
 
 分開還有一個好處:當檢索結果彼此矛盾時,你一眼就知道該信哪邊。
+
+`web/` 是第三種:內容來自外部官方文件,每篇附來源網址與 `fetched` 日期,會依 `volatility` 過期(`stable` 180 天、`product` 30 天)。它的信任程度看來源,不看寫入者——過期了就重查更新,不必整個砍。
 
 ## kb/ 怎麼放
 

@@ -16,7 +16,7 @@
 
 點 `.plugin` 檔的安裝按鈕就好,裝完立刻生效,而且**所有對話都能用**(plugin 是使用者層級,不綁對話)。
 
-要驗證的話,在新對話問「有哪些 agent 可以用?」,應該看得到 `worker`、`librarian`、`harvester`。
+要驗證的話,在新對話問「有哪些 agent 可以用?」,應該看得到 `worker`、`worker-hard`、`bulk`、`librarian`、`harvester`。
 
 ---
 
@@ -26,13 +26,13 @@
 
 ### 一鍵安裝
 
-把 `install.sh` 和 `tiered-agents.plugin` 放同一個目錄,然後:
+在 repo 根目錄執行(或把 `install.sh` 和 `smart-agent-route.plugin` 放同一個目錄;沒有 `.plugin` 時腳本會直接用 `plugins/smart-agent-route/`):
 
 ```bash
 bash install.sh
 ```
 
-腳本會把 plugin 解到 `~/.claude/skills/tiered-agents/`,那裡的 plugin 會**自動載入**,不需要 marketplace、不需要 `/plugin install`。
+腳本會把 plugin 解到 `~/.claude/skills/smart-agent-route/`,那裡的 plugin 會**自動載入**,不需要 marketplace、不需要 `/plugin install`。
 
 裝完重開 Claude Code(或在既有 session 執行 `/reload-plugins`)。
 
@@ -42,10 +42,16 @@ bash install.sh
 /context
 ```
 
-在 **Custom Agents** 區塊應該看得到三個 agent。或直接 @-mention 試試:
+在 **Custom Agents** 區塊應該看得到五個 agent。或直接 @-mention 試試:
 
 ```
-@agent-worker
+@agent-smart-agent-route:worker
+```
+
+搜程式碼也想改用 Haiku 的話,加上 `--with-explore`(會把 `templates/Explore.md` 放到 `~/.claude/agents/`,已存在則不覆蓋):
+
+```bash
+bash install.sh --with-explore
 ```
 
 ### 如果 agent 沒出現
@@ -56,12 +62,12 @@ bash install.sh
 bash install.sh --agents-only
 ```
 
-這條路更原始但更保險——`~/.claude/agents/` 是 Claude Code 讀取使用者 subagent 的標準位置。代價是失去 plugin 的命名空間與版本管理,agent 會以 `worker` 而不是 `tiered-agents:worker` 出現。
+這條路更原始但更保險——`~/.claude/agents/` 是 Claude Code 讀取使用者 subagent 的標準位置。代價是失去 plugin 的命名空間與版本管理,agent 會以 `worker` 而不是 `smart-agent-route:worker` 出現。
 
 ### 只想先試不想裝
 
 ```bash
-claude --plugin-dir ./tiered-agents.plugin
+claude --plugin-dir ./smart-agent-route.plugin
 ```
 
 `--plugin-dir` 吃得下 zip 壓縮檔,而 `.plugin` 就是 zip。這只對當次 session 有效,適合先試用。
@@ -76,7 +82,10 @@ claude --plugin-dir ./tiered-agents.plugin
 |---|---|---|
 | `model` | 指定 agent 用哪個模型 | 全部跟隨主對話模型,分層失效 |
 | `memory` | 持久記憶 | 記憶功能失效(但連接資料夾那條路仍可用) |
-| `effort` | 降低推理成本 | 跟隨 session 設定,只是比較貴 |
+| `effort` | 依失敗代價配置推理量 | 跟隨 session 設定 |
+| `omitClaudeMd` | bulk 不載入 CLAUDE.md(需 2.1.271+) | 會多載入 CLAUDE.md,較貴但可用 |
+
+context 長度提醒 hook 需要 `python3`;找不到時安靜停用。
 
 檢查版本:
 
