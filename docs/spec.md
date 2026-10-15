@@ -310,6 +310,21 @@ claude-memory/
 
 **UserPromptSubmit hook** — 從 `transcript_path` 讀主對話(排除 sidechain)最後一次呼叫的 input + cache 讀寫 token;以 12 萬為門檻、每 4 萬一格,「上次在哪一格」記在 `${CLAUDE_PLUGIN_DATA}/.context-check-state.json`(只比最後兩次呼叫會漏掉回合中途跨門檻的情況)。跨進新的一格才以 `additionalContext` 提醒一次,文字用陳述語氣。
 
+## 0.8 回報選擇題
+
+借用決策模型(如 Jev)的概念:**判斷做成固定選項,下一步照規則走,只有拿不準才交給模型。** 不接外部服務——分派本來就在 Opus 的同一輪回覆裡完成,沒有額外呼叫可省。
+
+worker、worker-hard、bulk 的回報前兩行固定:
+
+```
+狀態:完成 | 失敗 | 需要決策
+驗證:通過 | 未驗證 | 失敗
+```
+
+`完成` 只能搭配 `驗證:通過`;整份回報 30 行內。主對話(`guide.md`)照這兩行處理:完成+通過 → 抽查後採用;完成但未通過、或格式不合 → 當失敗;失敗 → 升級鏈;需要決策 → 不升級,主對話判斷或問使用者。librarian(回原文片段)與 harvester(與使用者互動)不套用。
+
+**未做:用 hook 強制格式。** 文件確認可行(`SubagentStop` 有 `last_assistant_message`、可 block,`stop_hook_active` 防迴圈),但 auto mode 下子 agent 改用 `SubagentHandback` 交報告,`last_assistant_message` 不是報告本身,要另外用 `PreToolUse`(matcher `SubagentHandback`)檢查 `tool_input.message`;且 hook 腳本壞掉時 exit 2 會讓子 agent 一直跑。等用量數據顯示子 agent 常不照格式再做。
+
 ## 已知限制
 
 - plugin 跨對話,記憶跟著資料夾走。Cowork 忘了連接資料夾等於失憶。
