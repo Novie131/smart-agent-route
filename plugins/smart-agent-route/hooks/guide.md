@@ -22,5 +22,5 @@
   - `需要決策` → 不升級；主對話判斷，判斷不了就問使用者
 - 失敗升級依序：補背景後同一個 agent 重派 → bulk 失敗改 worker → worker 失敗改 worker-hard（附失敗報告）→ 仍失敗就停下，重新規劃或詢問使用者，不再往上升。
 - 完成要有可執行的驗證（測試、lint、實際執行），「看起來完成」不算。
-- 對話變長時，UserPromptSubmit hook 會帶入目前的 context 大小；那時用 `/smart-agent-route:handoff` 寫交接筆記，再提醒使用者可以 /clear。
+- 對話變長時，UserPromptSubmit hook 會帶入目前的 context 大小；那時用 `/smart-agent-route:handoff` 寫交接筆記，再依情況給使用者一句可複製的 /clear、/compact 或 /rewind 指令。
 - 專案有 `claude-memory/` 時，下方會附上它的記憶索引；有 `handoff.md` 時也會附上，那是上一個對話留下的進度。

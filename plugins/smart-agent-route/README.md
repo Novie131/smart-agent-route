@@ -230,7 +230,7 @@ Opus 掛著一段長對話是最安靜的漏斗——整段歷史每輪重送一
 所以這一項不只靠自覺:
 
 - **UserPromptSubmit hook** 在 context 超過 12 萬 token 時提醒一次,之後每多 4 萬再提醒(門檻可用環境變數 `CONTEXT_REMIND_TOKENS` 調整)
-- 提醒時 Claude 會用 **handoff skill** 把現況寫進 `handoff.md`(目前任務 / 已完成 / 下一步 / 未決問題),再建議你 `/clear`
+- 提醒時 Claude 會用 **handoff skill** 把現況寫進 `handoff.md`(目前任務 / 已完成 / 下一步 / 未決問題),再依情況給你一句可直接複製的指令:告一段落 `/clear`、做到一半 `/compact 保留…`、後半段是除錯雜訊就 `/rewind` 局部摘要
 - 新 session 開始時 **SessionStart hook** 自動帶入 `claude-memory/handoff.md`,直接接手
 
 建議另外在 `~/.claude/settings.json` 把自動壓縮當保險(plugin 不能代設):`"autoCompactWindow": 200000`。
