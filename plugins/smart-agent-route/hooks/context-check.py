@@ -14,7 +14,8 @@ THRESHOLD = int(os.environ.get("CONTEXT_REMIND_TOKENS", "120000"))
 STEP = 40000
 KEEP = 50  # 狀態檔只留最近這麼多個對話
 STATE_PATH = os.path.join(
-    os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.dirname(os.path.abspath(__file__)),
+    # 不用 plugin 安裝時（symlink）沒有 CLAUDE_PLUGIN_DATA；不能放腳本旁邊，那會寫進 repo
+    os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser("~/.claude/hooks"),
     ".context-check-state.json",
 )
 
@@ -80,7 +81,7 @@ def main():
         "hookEventName": "UserPromptSubmit",
         "additionalContext": (
             f"目前對話的 context 約為 {now // 1000}k tokens，已超過 {THRESHOLD // 1000}k 的提醒門檻。"
-            "smart-agent-route 的 handoff skill（/smart-agent-route:handoff）用於此時：先更新交接筆記"
+            "smart-agent-route 的 handoff skill 用於此時：先更新交接筆記"
             "（不論使用者是否 /clear），再依當下情況，在回答結尾給使用者一句可直接複製的指令："
             "事情已告一段落 → /clear；做到一半 → /compact 保留<替使用者寫好要保留的決定與進度>；"
             "後半段多是除錯或探索雜訊 → /rewind 選<指出從哪一則訊息開始>，再按 Summarize from here。"

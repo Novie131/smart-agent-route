@@ -3,6 +3,7 @@
 #
 #   bash install.sh                 標準安裝(plugin 形式,保留命名空間)
 #   bash install.sh --agents-only   備援安裝(直接放 agent 定義,最保險)
+#   bash install.sh --link          用符號連結裝 agent、skill、hook(改 repo 立即生效,適合自己維護的人)
 #   bash install.sh --uninstall     移除
 #   bash install.sh --with-explore  另外安裝 Haiku 版 Explore 到 ~/.claude/agents/(plugin 蓋不掉內建版)
 #
@@ -20,12 +21,15 @@ SRC_DIR="${SCRIPT_DIR}/plugins/${PLUGIN_NAME}"
 PLUGIN_DEST="${HOME}/.claude/skills/${PLUGIN_NAME}"
 LEGACY_DEST="${HOME}/.claude/skills/tiered-agents"   # 0.7.0 以前的名稱
 AGENTS_DEST="${HOME}/.claude/agents"
+SKILLS_DEST="${HOME}/.claude/skills"
+HOOKS_LINK="${HOME}/.claude/hooks/${PLUGIN_NAME}"
 
 MODE="plugin"
 WITH_EXPLORE=0
 for arg in "$@"; do
   case "$arg" in
     --agents-only)  MODE="agents" ;;
+    --link)         MODE="link" ;;
     --uninstall)    MODE="uninstall" ;;
     --with-explore) WITH_EXPLORE=1 ;;
     *) printf '未知參數:%s\n' "$arg" >&2; exit 1 ;;
@@ -42,8 +46,21 @@ if [[ "$MODE" == "uninstall" ]]; then
   say "移除 ${PLUGIN_NAME}…"
   [[ -d "$PLUGIN_DEST" ]] && rm -rf "$PLUGIN_DEST" && ok "已移除 $PLUGIN_DEST"
   [[ -d "$LEGACY_DEST" ]] && rm -rf "$LEGACY_DEST" && ok "已移除舊版 $LEGACY_DEST"
+  # agent:只移除連到本 repo 的連結,或跟 repo 內容相同的複本(--agents-only 裝的);
+  # 內容不同的同名檔可能是使用者自己寫的,保留並提醒
   for a in worker worker-hard bulk librarian harvester; do
-    [[ -f "${AGENTS_DEST}/${a}.md" ]] && rm -f "${AGENTS_DEST}/${a}.md" && ok "已移除 ${a}.md"
+    f="${AGENTS_DEST}/${a}.md"
+    if [[ -L "$f" && "$(readlink "$f")" == "${SRC_DIR}/"* ]] || cmp -s "$f" "${SRC_DIR}/agents/${a}.md"; then
+      rm -f "$f" && ok "已移除 ${a}.md"
+    elif [[ -e "$f" ]]; then
+      warn "~/.claude/agents/${a}.md 跟本 repo 的版本不同,可能是你自己的檔案,沒有移除"
+    fi
+  done
+  # --link 裝的 skill 與 hook:只移除連到本 repo 的符號連結,不碰同名的其他檔案
+  for d in "${SKILLS_DEST}"/* "$HOOKS_LINK"; do
+    if [[ -L "$d" && "$(readlink "$d")" == "${SRC_DIR}/"* ]]; then
+      rm -f "$d" && ok "已移除連結 ${d/#$HOME/~}"
+    fi
   done
   say ""
   say "完成。重開 Claude Code,或執行 /reload-plugins。"
@@ -70,6 +87,52 @@ if command -v claude >/dev/null 2>&1; then
   ok "Claude Code $(claude --version 2>/dev/null | head -1)"
 else
   warn "PATH 裡找不到 claude 指令。檔案仍會照裝,但請確認 Claude Code 已安裝。"
+fi
+
+# ---------- 符號連結 ----------
+# 連到 repo 裡的檔案,改 repo 立即生效。已存在的檔案一律不覆蓋,避免蓋掉使用者自己寫的同名檔。
+if [[ "$MODE" == "link" ]]; then
+  [[ -d "$SRC_DIR" ]] || die "--link 需要 repo 內的 plugins/${PLUGIN_NAME}/(.plugin 封包不能連結)"
+  SKIPPED=0
+  link_one() {  # $1 = repo 內的來源, $2 = ~/.claude 底下的目的地
+    local shown="${2/#$HOME/~}"
+    if [[ -L "$2" && "$(readlink "$2")" == "$1" ]]; then
+      ok "${shown}(已連結)"
+    elif [[ -e "$2" || -L "$2" ]]; then
+      warn "${shown} 已存在,不覆蓋。要改用連結請先備份並刪除,再重跑。"
+      SKIPPED=1
+    else
+      ln -s "$1" "$2" && ok "${shown} → ${1/#$HOME/~}"
+    fi
+  }
+  say ""
+  say "建立符號連結…"
+  mkdir -p "$AGENTS_DEST" "$SKILLS_DEST" "$(dirname "$HOOKS_LINK")"
+  for f in "${SRC_DIR}"/agents/*.md; do link_one "$f" "${AGENTS_DEST}/$(basename "$f")"; done
+  for d in "${SRC_DIR}"/skills/*/; do d="${d%/}"; link_one "$d" "${SKILLS_DEST}/$(basename "$d")"; done
+  link_one "${SRC_DIR}/hooks" "$HOOKS_LINK"
+  if [[ "$SKIPPED" == 1 ]]; then warn "有項目沒連結(見上方),那些項目仍是你原本的檔案。"; fi
+  cat <<'MSG'
+
+──────────────────────────────────────────
+連結完成。此模式名稱不帶命名空間(worker、/handoff)。
+
+hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下面這段
+合併進 ~/.claude/settings.json 的 "hooks"(已有同類 hook 時先移除舊的,以免重複提醒):
+
+  "SessionStart": [
+    { "matcher": "startup|clear|compact",
+      "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/smart-agent-route/session-start.sh" }] }
+  ],
+  "UserPromptSubmit": [
+    { "hooks": [{ "type": "command",
+        "command": "sh ~/.claude/hooks/smart-agent-route/run-python.sh ~/.claude/hooks/smart-agent-route/context-check.py" }] }
+  ]
+
+之後重開 Claude Code,用 /agents 與 /hooks 確認。repo 搬家後連結會失效,重跑一次即可。
+──────────────────────────────────────────
+MSG
+  exit 0
 fi
 
 # ---------- 解壓到暫存並驗證 ----------

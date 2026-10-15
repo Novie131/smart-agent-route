@@ -64,6 +64,14 @@ bash install.sh --agents-only
 
 這條路更原始但更保險——`~/.claude/agents/` 是 Claude Code 讀取使用者 subagent 的標準位置。代價是失去 plugin 的命名空間與版本管理,agent 會以 `worker` 而不是 `smart-agent-route:worker` 出現。
 
+### 想自己維護、改了立即生效
+
+```bash
+bash install.sh --link
+```
+
+把 agent、skill、hook 用符號連結接到 repo 裡的檔案,`git pull` 或自己改完就生效,不用重裝。名稱不帶命名空間(`worker`、`/handoff`)。腳本不改 `settings.json`,會印出 hook 設定片段讓你自己貼。已存在的同名檔一律不覆蓋;repo 搬家後重跑一次即可。
+
 ### 只想先試不想裝
 
 ```bash
