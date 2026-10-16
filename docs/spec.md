@@ -1,5 +1,7 @@
 # smart-agent-route 架構 spec
 
+> 英文文件（README.en.md、plugins/smart-agent-route/INSTALL.en.md）是繁中版的翻譯；改 README.md 或 INSTALL.md 時要同步更新這兩份英文版。
+
 ## 目標
 
 主對話用 Opus 思考與判斷,執行工作派給較便宜的模型;主對話保持短,要留下的寫進記憶,對話可以隨時清空;知識跨對話累積。
@@ -17,7 +19,7 @@
           └──► harvester(Sonnet)  ← 挖歷史對話進知識庫。手動觸發
 
 hook :SessionStart 帶入分工慣例、記憶索引、交接筆記;UserPromptSubmit 在 context 過長時提醒
-skill:handoff 寫交接筆記;research 查外部資料、附來源、存筆記
+skill:handoff 寫交接筆記;research 查外部資料、附來源、存筆記;usage-stats 量測 context 與子 agent 用量
 ```
 
 **路由發生在 Opus 之後,不是之前。** 判斷意圖就得先讀懂訊息,而讀懂即規劃。所以 Opus 永遠是入口,由它派工。
@@ -37,6 +39,7 @@ skill:handoff 寫交接筆記;research 查外部資料、附來源、存筆記
 | `Explore`(範本) | Haiku | 唯讀 | 搜程式碼。須放 `~/.claude/agents/` 才能覆蓋內建版 |
 | `handoff` skill | — | — | 寫 `handoff.md`(四段、只記現況、≤60 行) |
 | `research` skill | — | — | 查外部資料、附來源、存 `web/` 筆記 |
+| `usage-stats` skill | — | — | 統計主對話 context 與子 agent 用量(含各類子 agent 跑在哪個模型) |
 
 worker 從 0.6 的 `low` 改為 `medium`:執行層做錯由主對話收拾的成本,高於推理省下的 token;升級鏈只在失敗時才付 `high`。
 
@@ -74,7 +77,7 @@ worker 從 0.6 的 `low` 改為 `medium`:執行層做錯由主對話收拾的成
 
 ## 省 token 的四個槓桿
 
-0. **對話長度**(實測最大)。21 個 session、約 2,000 次呼叫的實測:主對話每次呼叫的 context 中位數約 24 萬 token,快取讀取約 4.9 億 vs 輸出 240 萬——錢花在每輪重讀舊對話。→ hook 在 12 萬 token 時提醒、之後每 4 萬再提醒;handoff skill 寫下現況後 `/clear`;建議另設 `autoCompactWindow: 200000` 當保險。
+0. **對話長度**(實測最大)。21 個 session、約 2,000 次呼叫的實測:主對話每次呼叫的 context 中位數約 24 萬 token,快取讀取約 4.9 億 vs 輸出 240 萬——錢花在每輪重讀舊對話。→ hook 在 12 萬 token 時提醒、之後每 4 萬再提醒;handoff skill 寫下現況後 `/clear`;建議另設 `autoCompactWindow: 183000` 當保險。
 1. **Context 隔離**(複利)。對話中每則訊息在後續每一輪都會重送。30 次工具呼叫留在主對話 = 被反覆計費到對話結束;派給 subagent 則主對話只收摘要。→ **整包派工,不要一件一件派**,每次啟動 subagent 都要重付系統提示與記憶注入。
 2. **模型分層**。線性效果,省的比例約等於價差比例。
 3. **`effort`**。librarian `low`、worker `medium`、worker-hard `high`。依失敗代價配置,不是一律壓低。
@@ -89,7 +92,7 @@ worker 從 0.6 的 `low` 改為 `medium`:執行層做錯由主對話收拾的成
 
 **context 提醒用 python、安靜失敗** — 要解析 transcript 的 usage,純 sh 不可靠。`run-python.sh` 找不到可用的 python3 就跳過(macOS 未裝 Command Line Tools 時 `/usr/bin/python3` 會跳安裝視窗,先用 `xcode-select -p` 判斷);腳本任何錯誤都不擋使用者訊息。
 
-**Haiku 層預設只開檢索** — Haiku 的風險是「安靜地做錯」。檢索是例外:唯讀改不壞東西、成功標準明確、省得最多。其他 Haiku 用途需綁定具體任務後才啟用(見 plugin 內 `templates/runner.md.example`)。
+**Haiku 層預設只開檢索** — Haiku 的風險是「安靜地做錯」。檢索是例外:唯讀改不壞東西、成功標準明確、省得最多。其他 Haiku 用途需綁定具體任務後才啟用(見 plugin 內 `skills/route-setup/templates/runner.md.example`)。
 
 **記憶優先放連接資料夾** — `memory:` 欄位路徑寫死,而 Cowork 沙盒家目錄每 session 重建。放自己指定的資料夾才能跨對話、跨環境存活,順便就是 Obsidian vault。
 
@@ -114,21 +117,25 @@ smart-agent-route/
 │   └── harvester.md
 ├── skills/
 │   ├── handoff/SKILL.md
-│   └── research/SKILL.md
+│   ├── research/SKILL.md
+│   ├── usage-stats/SKILL.md
+│   └── route-setup/
+│       ├── SKILL.md
+│       ├── apply_settings.py   ← 唯一會寫 settings.json 的程式（只碰 statusLine、autoCompactWindow）
+│       └── route-setup/templates/ ← MEMORY.md、KNOWLEDGE-BASE.md、Explore.md、runner.md.example
 ├── hooks/
 │   ├── hooks.json          ← 最外層必須包一層 "hooks" 鍵,否則載入失敗
 │   ├── session-start.sh    ← 純 sh + awk
 │   ├── guide.md            ← session-start.sh 輸出的分工慣例
 │   ├── run-python.sh       ← 找不到可用 python3 就安靜跳過
+│   ├── compact.py          ← 壓縮點（autoCompactWindow − buffer），statusline 與 context-check 共用
+│   ├── statusline.py       ← 狀態列指令，需使用者在 settings 的 statusLine 指定
 │   └── context-check.py
-└── templates/
-    ├── MEMORY.md
-    ├── KNOWLEDGE-BASE.md
-    ├── Explore.md          ← 使用者層級才生效,不會被 plugin 載入
-    └── runner.md.example
 ```
 
-`agents/`、`skills/`、`hooks/`、`templates/` 必須在 plugin 根目錄,**不可放進 `.claude-plugin/`**。
+`skills/route-setup/templates/Explore.md` 只有放進使用者層級 `~/.claude/agents/` 才生效，不會被 plugin 載入。
+
+`agents/`、`skills/`、`hooks/` 必須在 plugin 根目錄,**不可放進 `.claude-plugin/`**。
 
 plugin 內的元件都帶命名空間:agent 是 `smart-agent-route:worker`,skill 是 `/smart-agent-route:handoff`。
 
@@ -324,6 +331,25 @@ worker、worker-hard、bulk 的回報前兩行固定:
 `完成` 只能搭配 `驗證:通過`;整份回報 30 行內。主對話(`guide.md`)照這兩行處理:完成+通過 → 抽查後採用;完成但未通過、或格式不合 → 當失敗;失敗 → 升級鏈;需要決策 → 不升級,主對話判斷或問使用者。librarian(回原文片段)與 harvester(與使用者互動)不套用。
 
 **未做:用 hook 強制格式。** 文件確認可行(`SubagentStop` 有 `last_assistant_message`、可 block,`stop_hook_active` 防迴圈),但 auto mode 下子 agent 改用 `SubagentHandback` 交報告,`last_assistant_message` 不是報告本身,要另外用 `PreToolUse`(matcher `SubagentHandback`)檢查 `tool_input.message`;且 hook 腳本壞掉時 exit 2 會讓子 agent 一直跑。等用量數據顯示子 agent 常不照格式再做。
+
+## 0.8 context 可見性
+
+- `compact.py` 的 `compact_point()`:讀 `~/.claude/settings.json` 的 `autoCompactWindow`,減 buffer(預設 33000,實測 183000 時 `/context` 顯示 33k、約 150k 壓縮;環境變數 `CONTEXT_AUTOCOMPACT_BUFFER` 可覆寫)。沒設定、讀不到、JSON 壞掉回 None。
+- `statusline.py`:`模型 │ ctx Nk │ 提醒 120k │ 壓縮 150k`。用 `context_window.total_input_tokens`(缺時加總 `current_usage`),不用 `used_percentage`(以完整視窗算,1M 模型 12 萬只顯示 12%)。plugin 不能設主狀態列;`install.sh --with-statusline` 只在使用者沒有 `statusLine` 時寫入(先備份),絕不碰其他鍵,也不寫 `autoCompactWindow`。
+- context-check 的提醒文字在壓縮點已知時帶入「約 Nk 會自動壓縮」,import 失敗退回原句。
+- guide.md 加兩條:持續萃取 handoff、實作派 worker 不派 general-purpose(實測曾有 408 次實作跑在 Opus)。
+
+## 0.8 安裝後零手動
+
+目標：裝完即可用；完整功能由一個互動 skill 帶使用者做，而不是要求讀文件手動改設定。
+
+- **記憶退回 auto memory。** 沒有 `claude-memory/` 時：librarian 在 `claude-memory/` 之後搜 auto memory 目錄（`~/.claude/projects/<專案路徑把 / 換成 ->/memory/`）；harvester 寫入退回該目錄（筆記放 `kb/`，索引行寫進它的 `MEMORY.md`，保持精簡）；research 存到其 `web/`，`MEMORY.md` 只加一行指向 `web/INDEX.md`（取代原本的「不存檔」）。session-start.sh 沒有 `claude-memory/` 時**不**帶入 auto memory 的 `MEMORY.md`，因為 Claude Code 本來就會自己帶。
+- **`route-setup` skill**（`disable-model-invocation: true`，只能由使用者呼叫）。逐項說明「做什麼 → 影響 → 怎麼還原」，一次問一項、可略過：記憶、Haiku Explore、`autoCompactWindow` 183000、狀態列、模型（只回報不強改）。結束寫完成標記（全部略過也寫）。
+- **`apply_settings.py`**（標準函式庫）是唯一寫 `settings.json` 的路徑：只碰 `statusLine` 與 `autoCompactWindow`；已有值不覆蓋（結束碼 3）；JSON 壞掉或最外層不是物件不寫（結束碼 2）；寫前備份 `settings.json.bak-<時間>`；暫存檔＋`os.replace` 整份寫回；檔案不存在就建立。`install.sh --with-statusline` 也呼叫它。工具呼叫被權限擋下時，skill 不重試不繞路，把完整指令交給使用者以 `! <指令>` 自己執行。
+- **狀態列檔案放固定位置。** user settings 不會展開 `${CLAUDE_PLUGIN_ROOT}`，而快取目錄含版本號、升級即失效，所以 plugin 安裝時把 `statusline.py`、`compact.py` 複製到 `~/.claude/smart-agent-route/statusline/`；session-start.sh 之後在該目錄存在時自動同步（內容不同才複製，目的地是符號連結不動）。
+- **session-start.sh 的提示。** 標記檔 `${CLAUDE_PLUGIN_DATA:-$HOME/.claude/hooks}/.route-setup-done` 不存在且 `.route-setup-shown` 計數 < 3 時，輸出 JSON：`systemMessage` 一句話提示 route-setup，原本的全部文字放 `hookSpecificOutput.additionalContext`，並計數加 1；其他情況照舊輸出純文字。只用 sh 與 awk，JSON 跳脫 `\`、`"`、換行、tab 與其他控制字元，任何錯誤安靜結束。`hooks.json` 不新增 hook。
+- **不採用 plugin settings 的 `agent` 鍵。** 它會把使用者所有對話的主 agent 換成 plugin 指定的那個，副作用遠大於「少打一個指令」的好處。
+- **不自動寫 `settings.json`。** plugin 無法安全地代使用者改全域設定；一律經使用者同意，且 33k buffer 只是作者機器的實測值，需使用者用 `/context` 確認。
 
 ## 已知限制
 

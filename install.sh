@@ -6,6 +6,10 @@
 #   bash install.sh --link          用符號連結裝 agent、skill、hook(改 repo 立即生效,適合自己維護的人)
 #   bash install.sh --uninstall     移除(依安裝清單,不動你自己的檔案)
 #   bash install.sh --with-explore  另外安裝 Haiku 版 Explore 到 ~/.claude/agents/(plugin 蓋不掉內建版)
+#   bash install.sh --with-statusline  另外在 ~/.claude/settings.json 加 context 狀態列(statusLine)
+#                                   可與預設複製模式或 --link 併用;不能與 --agents-only、--uninstall 併用。
+#                                   只碰 statusLine 這一個鍵:沒有檔案就建立;已有 statusLine 不覆蓋,只印建議;
+#                                   其餘情況先備份成 settings.json.bak-<時間> 再寫入;JSON 壞掉或沒有 python3 則不修改。
 #
 # 複製安裝的項目記在 ~/.claude/.smart-agent-route-installed(每行一個相對 ~/.claude 的路徑)。
 # 有 smart-agent-route.plugin 就從它安裝;沒有(例如直接 clone repo)就用 plugins/smart-agent-route/。
@@ -28,12 +32,14 @@ MANIFEST="${HOME}/.claude/.smart-agent-route-installed"
 
 MODE="copy"
 WITH_EXPLORE=0
+WITH_STATUSLINE=0
 for arg in "$@"; do
   case "$arg" in
     --agents-only)  MODE="agents" ;;
     --link)         MODE="link" ;;
     --uninstall)    MODE="uninstall" ;;
     --with-explore) WITH_EXPLORE=1 ;;
+    --with-statusline) WITH_STATUSLINE=1 ;;
     *) printf '未知參數:%s\n' "$arg" >&2; exit 1 ;;
   esac
 done
@@ -42,6 +48,10 @@ say()  { printf '%s\n' "$*"; }
 ok()   { printf '  ✔ %s\n' "$*"; }
 warn() { printf '  ! %s\n' "$*"; }
 die()  { printf '\n✘ %s\n' "$*" >&2; exit 1; }
+
+if [[ "$WITH_STATUSLINE" == 1 && ( "$MODE" == "agents" || "$MODE" == "uninstall" ) ]]; then
+  die "--with-statusline 不能與 --agents-only 或 --uninstall 併用。"
+fi
 
 # ---------- 移除 ----------
 if [[ "$MODE" == "uninstall" ]]; then
@@ -122,6 +132,53 @@ hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下
 MSG
 }
 
+# ---------- 狀態列(--with-statusline) ----------
+SETTINGS="${HOME}/.claude/settings.json"
+STATUSLINE_CMD="python3 ~/.claude/hooks/smart-agent-route/statusline.py"
+
+print_statusline_snippet() {
+  cat <<MSG
+
+  "statusLine": { "type": "command", "command": "${STATUSLINE_CMD}" }
+MSG
+}
+
+# 實際寫入交給 skills/route-setup/apply_settings.py(只碰 statusLine,不碰 permissions、hooks 或其他鍵;
+# 已有值不覆蓋、壞 JSON 不寫、寫前備份、檔案不存在就建立)。不寫 autoCompactWindow。
+setup_statusline() {
+  say ""
+  say "設定狀態列…"
+  local apply="${SRC_DIR}/skills/route-setup/apply_settings.py"
+  [[ -f "$apply" ]] || apply="${TMP:-/nonexistent}/skills/route-setup/apply_settings.py"
+  if ! command -v python3 >/dev/null 2>&1 || [[ ! -f "$apply" ]]; then
+    warn "找不到 python3(或 apply_settings.py),不修改 settings.json。要啟用請自行把下面這段加進去:"
+    print_statusline_snippet
+    return 0
+  fi
+  local out rc=0
+  out="$(python3 "$apply" --settings "$SETTINGS" --set-statusline "$STATUSLINE_CMD" 2>&1)" || rc=$?
+  case "$rc" in
+    0)
+      ok "已處理 ~/.claude/settings.json 的 statusLine(其他鍵不變)"
+      while IFS= read -r line; do
+        if [[ "$line" == 備份* ]]; then ok "$line"; fi   # 不用 && :最後一行不符時回傳 1,會被 set -e 當成失敗
+      done <<< "$out" ;;
+    3)
+      warn "settings.json 已有 statusLine,不覆蓋。若要用本 plugin 的狀態列,請自行改成:"
+      print_statusline_snippet ;;
+    *)
+      warn "無法修改 settings.json(${out}),不修改。要啟用請自行加入:"
+      print_statusline_snippet ;;
+  esac
+}
+
+print_statusline_tips() {
+  say ""
+  say "建議另外在 ~/.claude/settings.json 加(本腳本不會寫):"
+  say '  "autoCompactWindow": 183000'
+  say "裝好後用 /context 確認 Autocompact buffer(實測約 33k,約 150k 壓縮);有 modelSettings 逐模型覆蓋時要一併看。"
+}
+
 # ---------- 清掉舊版錯誤的安裝位置 ----------
 if [[ -e "$PLUGIN_DEST" || -L "$PLUGIN_DEST" ]]; then
   rm -rf "$PLUGIN_DEST"
@@ -160,6 +217,7 @@ if [[ "$MODE" == "link" ]]; then
   say "連結完成。此模式名稱不帶命名空間(worker、/handoff)。"
   say ""
   print_hook_snippet
+  if [[ "$WITH_STATUSLINE" == 1 ]]; then setup_statusline; print_statusline_tips; fi
   say ""
   say "之後重開 Claude Code,用 /agents 與 /hooks 確認。repo 搬家後連結會失效,重跑一次即可。"
   say "──────────────────────────────────────────"
@@ -233,7 +291,7 @@ fi
 if [[ "$MODE" == "agents" ]]; then
   say ""
   say "註:agent 名稱不帶命名空間(worker 而非 smart-agent-route:worker)。"
-  warn "此模式只裝 agent:hook(context 提醒、session 開始帶入記憶)與 skill(handoff、research)不會生效。"
+  warn "此模式只裝 agent:hook(context 提醒、session 開始帶入記憶)與 skill(handoff、research、usage-stats)不會生效。"
 fi
 
 if [[ "$WITH_EXPLORE" == 1 ]]; then
@@ -241,7 +299,7 @@ if [[ "$WITH_EXPLORE" == 1 ]]; then
     warn "~/.claude/agents/Explore.md 已存在,不覆蓋。要換成 plugin 的版本請先自行備份並刪除。"
   else
     mkdir -p "$AGENTS_DEST"
-    cp "${TMP}/templates/Explore.md" "${AGENTS_DEST}/Explore.md"
+    cp "${TMP}/skills/route-setup/templates/Explore.md" "${AGENTS_DEST}/Explore.md"
     ok "Explore.md → ~/.claude/agents/(搜尋程式碼改用 Haiku)"
   fi
 fi
@@ -270,6 +328,8 @@ say ""
 say "3. 把主對話設成 Opus(不會自動改這個):"
 say "     /model opus"
 say ""
+if [[ "$WITH_STATUSLINE" == 1 ]]; then setup_statusline; print_statusline_tips; fi
+say ""
 say "更新:之後重跑 bash install.sh 即可(清單內的項目會被覆蓋更新)。"
 cat <<'EOF'
 
@@ -278,7 +338,7 @@ cat <<'EOF'
 
   mkdir -p <你的資料夾>/claude-memory/{topics,kb,web}
 
-再把 plugin 裡的 templates/MEMORY.md 複製進去當起點。
+再把 plugin 裡的 skills/route-setup/templates/MEMORY.md 複製進去當起點(或在 Claude Code 裡執行 /route-setup)。
 CLI 在該資料夾底下開 session,Cowork 則每次把它連接進來。
 
 詳細說明見 plugin 內的 INSTALL.md 與 README.md。

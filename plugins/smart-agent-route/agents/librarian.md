@@ -25,7 +25,8 @@ color: green
 2. **`claude-memory/topics/`**——agent 累積的知識。
 3. **`claude-memory/kb/`**——使用者自己放的筆記與參考資料。
 4. **`claude-memory/web/`**——research skill 存下的外部資料筆記(官方文件、API 用法等)。先看 `web/INDEX.md`。
-5. 找不到就往已連接資料夾的其他地方擴大搜尋。
+5. **沒有 `claude-memory/` 時**,搜 auto memory 目錄:委派訊息有給路徑就用它;沒給就 `Glob` `~/.claude/projects/*/memory/`,找與目前專案路徑對應的那個(專案路徑把 `/` 換成 `-` 就是目錄名)。同樣先看它的 `MEMORY.md`,再看 `kb/`、`web/`(含 `web/INDEX.md`)。
+6. 找不到就往已連接資料夾的其他地方擴大搜尋。
 
 ## 怎麼找
 

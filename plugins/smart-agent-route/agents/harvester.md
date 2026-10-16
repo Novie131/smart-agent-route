@@ -23,9 +23,9 @@ color: purple
 
 **3. 逐一讀取,邊讀邊萃取。** 讀完一個就先想清楚它有什麼值得留,再讀下一個。不要全部讀完才開始整理——那樣你的 context 會先爆掉。
 
-**4. 寫進 `claude-memory/kb/`。**
+**4. 寫進 `claude-memory/kb/`。** 沒有 `claude-memory/` 時退回 auto memory 目錄(委派訊息會給路徑;沒給就 `Glob` `~/.claude/projects/*/memory/` 找與目前專案對應的那個),筆記一樣放在它的 `kb/`。
 
-**5. 更新 `claude-memory/MEMORY.md` 的觸發索引**,每個新筆記加一行,條件寫成明確情境。
+**5. 更新 `claude-memory/MEMORY.md` 的觸發索引**(退回 auto memory 時是該目錄的 `MEMORY.md`),每個新筆記加一行,條件寫成明確情境。auto memory 的 `MEMORY.md` 每個 session 都會被帶入,索引行要精簡。
 
 ## 什麼值得留
 

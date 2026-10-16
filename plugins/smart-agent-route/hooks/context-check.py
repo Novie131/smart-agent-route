@@ -64,6 +64,18 @@ def remember(path, now_bucket):
     return prev
 
 
+def closing():
+    """提醒文字的最後一句；有設定 autoCompactWindow 就帶入預估壓縮點，任何錯誤都退回原句。"""
+    try:
+        from compact import compact_point
+        point = compact_point()
+    except Exception:
+        point = None
+    if point is None:
+        return "並說明不處理的話，接近 context 上限時會自動壓縮，時機和重點都不是自己選的。"
+    return f"並說明不處理的話，約 {point // 1000}k 會自動壓縮，時機和重點都不是自己選的。"
+
+
 def main():
     try:
         path = json.load(sys.stdin).get("transcript_path")
@@ -85,7 +97,7 @@ def main():
             "（不論使用者是否 /clear），再依當下情況，在回答結尾給使用者一句可直接複製的指令："
             "事情已告一段落 → /clear；做到一半 → /compact 保留<替使用者寫好要保留的決定與進度>；"
             "後半段多是除錯或探索雜訊 → /rewind 選<指出從哪一則訊息開始>，再按 Summarize from here。"
-            "並說明不處理的話，接近 context 上限時會自動壓縮，時機和重點都不是自己選的。"
+            + closing()
         ),
     }}, ensure_ascii=False))
 

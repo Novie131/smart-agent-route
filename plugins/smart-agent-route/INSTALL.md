@@ -1,5 +1,7 @@
 # 三種環境怎麼裝
 
+[English](INSTALL.en.md) | 繁體中文
+
 先講結論:
 
 | 環境 | 裝法 | 跟誰共用 |
@@ -14,7 +16,7 @@
 
 ## Cowork(桌面版)
 
-點 `.plugin` 檔的安裝按鈕就好,裝完立刻生效,而且**所有對話都能用**(plugin 是使用者層級,不綁對話)。
+點 `.plugin` 檔的安裝按鈕就好,**裝完即可用**(想要狀態列、自動壓縮門檻、Haiku Explore、claude-memory 等完整功能,執行 `/smart-agent-route:route-setup`),而且**所有對話都能用**(plugin 是使用者層級,不綁對話)。
 
 要驗證的話,在新對話問「有哪些 agent 可以用?」,應該看得到 `worker`、`worker-hard`、`bulk`、`librarian`、`harvester`。
 
@@ -40,7 +42,17 @@ bash install.sh
 
 **hook 不會自動啟用**:腳本不改你的 `settings.json`,結尾會印出一段設定片段,要自己合併進 `~/.claude/settings.json` 的 `"hooks"`(已有同類 hook 時先移除舊的)。
 
-裝完重開 Claude Code。
+裝完重開 Claude Code,即可使用;想要完整功能(狀態列、自動壓縮門檻、Haiku Explore、claude-memory)執行 `/route-setup`(此模式下 hook 要先照上面貼進 settings.json,提示才會出現)。
+
+### 狀態列(選用)
+
+加 `--with-statusline`(可與預設複製模式或 `--link` 併用;不能與 `--agents-only`、`--uninstall` 併用)。腳本只處理 `~/.claude/settings.json` 的 `statusLine`:檔案不存在就建立;已有 `statusLine` 不覆蓋,只印建議片段;沒有時先備份成 `settings.json.bak-<時間>`,再只加這一個鍵。JSON 壞掉或沒有 python3 則不修改。手動做法是貼這段(路徑只適用 install.sh 安裝;plugin 安裝的使用者請用 `/smart-agent-route:route-setup`):
+
+```json
+"statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }
+```
+
+另建議 `"autoCompactWindow": 183000`(腳本不會寫):扣掉約 33k buffer 後約 150k 壓縮,120k 提醒後留 3 萬緩衝寫 handoff。33k 是本機實測值,裝好後用 `/context` 確認。
 
 ### 驗證
 
@@ -56,7 +68,7 @@ bash install.sh
 
 hook 貼好片段後,可用 `/hooks` 確認。
 
-搜程式碼也想改用 Haiku 的話,加上 `--with-explore`(會把 `templates/Explore.md` 放到 `~/.claude/agents/`,已存在則不覆蓋):
+搜程式碼也想改用 Haiku 的話,加上 `--with-explore`(會把 `skills/route-setup/templates/Explore.md` 放到 `~/.claude/agents/`,已存在則不覆蓋):
 
 ```bash
 bash install.sh --with-explore
@@ -70,7 +82,7 @@ bash install.sh --with-explore
 bash install.sh --agents-only
 ```
 
-只複製 agent 定義(同樣記入清單)。代價是 hook(context 提醒、session 開始帶入記憶)與 skill(`/handoff`、`/research`)不會生效。
+只複製 agent 定義(同樣記入清單)。代價是 hook(context 提醒、session 開始帶入記憶)與 skill(`/handoff`、`/research`、`/usage-stats`)不會生效。
 
 ### 想自己維護、改了立即生效
 

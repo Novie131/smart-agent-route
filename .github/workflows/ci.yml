@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Shell syntax check
+        run: |
+          bash -n install.sh
+          for f in plugins/smart-agent-route/hooks/*.sh; do sh -n "$f"; done
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate marketplace
+        run: claude plugin validate --strict .
+      - name: Validate plugin
+        run: claude plugin validate --strict plugins/smart-agent-route

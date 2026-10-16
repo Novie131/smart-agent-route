@@ -45,9 +45,8 @@ smart-agent-route/
 │   └── smart-agent-route/        ← plugin 本體
 │       ├── .claude-plugin/plugin.json
 │       ├── agents/
-│       ├── skills/
-│       ├── hooks/
-│       └── templates/
+│       ├── skills/               ← 含 route-setup/templates/ 與 apply_settings.py
+│       └── hooks/
 ├── docs/
 │   ├── spec.md               ← 架構設計與實作附錄
 │   ├── 部署安裝.md

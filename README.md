@@ -1,5 +1,7 @@
 # Smart Agent Route
 
+[English](README.en.md) | 繁體中文
+
 Claude Code plugin:**主對話用 Opus 思考,執行派給 Sonnet,檢索與大量讀取交給 Haiku**;context 過長時提醒並寫交接筆記,讓對話可以放心清空;知識跨對話累積,外部資料附來源。
 
 > A Claude Code plugin for tiered model delegation — Opus plans, Sonnet executes, Haiku retrieves and digests bulk output — plus context-length reminders with handoff notes so the main conversation stays short, and persistent, source-cited memory that accumulates across conversations. Documentation is in Traditional Chinese.
@@ -15,22 +17,15 @@ Claude Code plugin:**主對話用 Opus 思考,執行派給 Sonnet,檢索與大�
 
 (Claude Code 2.1.275 以前:先 `/plugin marketplace add Novie131/smart-agent-route`,再 `/plugin install smart-agent-route@smart-agent-route`。)
 
-裝完還要做幾件事(plugin 不能代設):
+裝完即可用，不必再手動設定。想要完整功能（context 狀態列、自動壓縮門檻、Haiku 版 Explore、claude-memory 記憶庫），在 Claude Code 裡執行：
 
 ```
-/model opus
+/smart-agent-route:route-setup
 ```
 
-```bash
-mkdir -p <你的資料夾>/claude-memory/{topics,kb,web}
-```
+它會一項一項說明做什麼、影響、怎麼還原，一次只問一項，可以隨時略過；寫 `settings.json` 前會備份，已有的值不覆蓋。沒做 route-setup 時，session 開始會提示你（最多 3 次）。主對話模型建議設成 Opus（`/model opus`），這個不會自動改。
 
-再把 `plugins/smart-agent-route/templates/MEMORY.md` 複製進 `claude-memory/`。
-
-建議再做兩件:
-
-- 搜程式碼改用 Haiku:`cp plugins/smart-agent-route/templates/Explore.md ~/.claude/agents/`(plugin 蓋不掉內建 Explore,見 [docs/spec.md](docs/spec.md))
-- 自動壓縮當保險:`~/.claude/settings.json` 加 `"autoCompactWindow": 200000`
+沒有 `claude-memory/` 時，記憶退回 Claude Code 自己的 auto memory，一樣可用；`claude-memory/` 是進階選項（可進 git、跨環境共用）。
 
 context 長度提醒需要 `python3`,沒有的話會安靜停用。
 
@@ -51,7 +46,7 @@ context 長度提醒需要 `python3`,沒有的話會安靜停用。
           ├──► librarian(Haiku)     ← 查知識庫。唯讀
           └──► harvester(Sonnet)    ← 挖歷史對話進知識庫。手動觸發
 
-skill:handoff(交接筆記)、research(查外部資料並附來源)
+skill:handoff(交接筆記)、research(查外部資料並附來源)、usage-stats(量測 context 與子 agent 用量)、route-setup(一次性完整設定)
 hook :session 開始帶入分工慣例與記憶;context 過長時提醒
 ```
 
@@ -103,9 +98,9 @@ smart-agent-route/
 ├── plugins/smart-agent-route/            ← plugin 本體
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester
-│   ├── skills/                       ← handoff / research
+│   ├── skills/                       ← handoff / research / usage-stats / route-setup
 │   ├── hooks/                        ← SessionStart 帶入、context 長度提醒
-│   └── templates/                    ← MEMORY.md、知識庫說明、Explore、Haiku 層範本
+│   （範本在 skills/route-setup/templates/：MEMORY.md、知識庫說明、Explore、Haiku 層範本）
 ├── docs/
 │   ├── spec.md                       ← 架構設計與實作附錄
 │   ├── 部署安裝.md
@@ -125,7 +120,7 @@ smart-agent-route/
 - 委派靠 `description` 匹配,不是保證。要確定就 `@agent-smart-agent-route:worker`
 - hook 在 Cowork 的行為未驗證
 - `MEMORY.md` 會腐化,需要你定期整理(超過 150 行即是訊號)
-- Haiku 執行層預設留空,見 `plugins/smart-agent-route/templates/runner.md.example` 的啟用條件
+- Haiku 執行層預設留空,見 `plugins/smart-agent-route/skills/route-setup/templates/runner.md.example` 的啟用條件
 - `harvester` 只讀得到本機 session
 
 歡迎開 issue。

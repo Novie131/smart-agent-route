@@ -23,7 +23,7 @@
             ├──► harvester(Sonnet)        ← 把歷史對話挖進知識庫(手動觸發)
             └──► 你自訂的 Haiku agent       ← 已驗證的固定流程(預設留空)
 
-  skill:handoff(寫交接筆記)、research(查外部資料並附來源)
+  skill:handoff(寫交接筆記)、research(查外部資料並附來源)、usage-stats(量測 context 與子 agent 用量)
   hook :SessionStart(帶入分工慣例、記憶索引、交接筆記)、UserPromptSubmit(context 過長時提醒)
 ```
 
@@ -34,6 +34,9 @@
 ---
 
 ## 安裝與設定
+
+**裝完即可用。** 想要完整功能（狀態列、自動壓縮門檻、Haiku Explore、claude-memory）執行 `/smart-agent-route:route-setup`（install.sh 安裝則是 `/route-setup`）；下面各步驟是它在做的事，也可以手動做。
+
 
 ### 1. 安裝 plugin
 
@@ -50,7 +53,7 @@ context 長度提醒需要 `python3`;沒有的話這個 hook 會安靜停用,其
 主對話是 Opus 時,內建的 Explore 也跑 Opus。**plugin 裡的 agent 蓋不掉內建 Explore**——官方文件寫明只有使用者或專案層級、名為 `Explore` 的 agent 才能覆蓋。所以這一步要手動:
 
 ```bash
-cp templates/Explore.md ~/.claude/agents/Explore.md   # 或 bash install.sh --with-explore
+cp skills/route-setup/templates/Explore.md ~/.claude/agents/Explore.md   # 或 bash install.sh --with-explore，或 /route-setup
 ```
 
 已經有自己的 `Explore.md` 就不用做。
@@ -88,10 +91,10 @@ plugin 本身裝一次就到處都在(它在使用者層級,不綁對話)。但*
 
 ```bash
 mkdir -p <你的資料夾>/claude-memory/{topics,kb,web}
-cp templates/MEMORY.md <你的資料夾>/claude-memory/MEMORY.md
+cp skills/route-setup/templates/MEMORY.md <你的資料夾>/claude-memory/MEMORY.md   # 或 /route-setup
 ```
 
-`topics/` 給 agent 累積,`kb/` 放你自己的筆記——詳見 `templates/KNOWLEDGE-BASE.md`。
+`topics/` 給 agent 累積,`kb/` 放你自己的筆記——詳見 `skills/route-setup/templates/KNOWLEDGE-BASE.md`。
 
 然後:
 
@@ -138,7 +141,7 @@ cp templates/MEMORY.md <你的資料夾>/claude-memory/MEMORY.md
 
 ## 擴充:什麼時候加 Haiku 層
 
-`templates/runner.md.example` 是預留的位置,**目前不會被載入**,這是刻意的。
+`skills/route-setup/templates/runner.md.example` 是預留的位置,**目前不會被載入**,這是刻意的。
 
 Haiku 層是唯一真正省錢、也唯一真正有風險的一層——它不會停下來問你,它會照著它以為的意思安靜做完。所以每個 Haiku agent 都必須綁死在一件具體任務上,不能寫成通用 runner。
 
@@ -168,7 +171,7 @@ Haiku 層是唯一真正省錢、也唯一真正有風險的一層——它不�
 
 所以這是唯一我願意預設就開的 Haiku agent。
 
-知識庫的目錄結構與組織原則見 `templates/KNOWLEDGE-BASE.md`,包含什麼時候才該考慮上向量檢索(簡短答案:個人規模通常不需要,而且常常更差)。
+知識庫的目錄結構與組織原則見 `skills/route-setup/templates/KNOWLEDGE-BASE.md`,包含什麼時候才該考慮上向量檢索(簡短答案:個人規模通常不需要,而且常常更差)。
 
 ### 兩種餵資料的方式
 
@@ -233,7 +236,15 @@ Opus 掛著一段長對話是最安靜的漏斗——整段歷史每輪重送一
 - 提醒時 Claude 會用 **handoff skill** 把現況寫進 `handoff.md`(目前任務 / 已完成 / 下一步 / 未決問題),再依情況給你一句可直接複製的指令:告一段落 `/clear`、做到一半 `/compact 保留…`、後半段是除錯雜訊就 `/rewind` 局部摘要
 - 新 session 開始時 **SessionStart hook** 自動帶入 `claude-memory/handoff.md`,直接接手
 
-建議另外在 `~/.claude/settings.json` 把自動壓縮當保險(plugin 不能代設):`"autoCompactWindow": 200000`。
+建議另外在 `~/.claude/settings.json` 把自動壓縮當保險(plugin 不能代設，`/smart-agent-route:route-setup` 會幫你安全地寫入):`"autoCompactWindow": 183000`:扣掉約 33k 的 buffer 後約在 150k 自動壓縮,在 120k 提醒之後留 3 萬緩衝寫 handoff(33k 是本機實測值,請用 `/context` 確認 Autocompact buffer;有 `modelSettings` 逐模型覆蓋時要一併看)。
+
+**狀態列**(選用):顯示 `模型 │ ctx 95k │ 提醒 120k │ 壓縮 150k`,壓縮點讀自 `autoCompactWindow`(沒設就不顯示)。plugin 不能設定主狀態列,用 `bash install.sh --with-statusline`,或手動貼進 settings.json(路徑只適用 install.sh 安裝;plugin 安裝的使用者請用 `/smart-agent-route:route-setup`，它會把檔案放到固定位置):
+
+```json
+"statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }
+```
+
+提醒文字也會帶入預估的壓縮點。
 
 ---
 
