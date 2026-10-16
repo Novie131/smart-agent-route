@@ -10,7 +10,13 @@
 """
 import json, os, sys
 
-THRESHOLD = int(os.environ.get("CONTEXT_REMIND_TOKENS", "120000"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from compact import compact_point, remind_tokens
+    THRESHOLD = remind_tokens()
+except Exception:  # compact.py 缺檔也不擋提醒
+    compact_point = lambda: None  # noqa: E731
+    THRESHOLD = int(os.environ.get("CONTEXT_REMIND_TOKENS") or 100000)
 STEP = 40000
 KEEP = 50  # 狀態檔只留最近這麼多個對話
 STATE_PATH = os.path.join(
@@ -64,16 +70,26 @@ def remember(path, now_bucket):
     return prev
 
 
-def closing():
-    """提醒文字的最後一句；有設定 autoCompactWindow 就帶入預估壓縮點，任何錯誤都退回原句。"""
+def reminder(now):
+    head = f"目前對話的 context 約為 {now // 1000}k tokens，已超過 {THRESHOLD // 1000}k 的提醒門檻。"
     try:
-        from compact import compact_point
         point = compact_point()
     except Exception:
         point = None
-    if point is None:
-        return "並說明不處理的話，接近 context 上限時會自動壓縮，時機和重點都不是自己選的。"
-    return f"並說明不處理的話，約 {point // 1000}k 會自動壓縮，時機和重點都不是自己選的。"
+    if point is not None:
+        return (
+            head + "請依 smart-agent-route 的 handoff skill 先更新交接筆記，"
+            f"然後在回答結尾用一句話告訴使用者：「交接筆記已更新；約 {point // 1000}k 會自動壓縮，"
+            "壓縮後會自動帶回交接筆記，不需要手動處理。這件事若已告一段落，換新對話或 /clear 更省」。"
+            "不需要再給 /compact 或 /rewind 指令。"
+        )
+    return (
+        head + "smart-agent-route 的 handoff skill 用於此時：先更新交接筆記"
+        "（不論使用者是否 /clear），再依當下情況，在回答結尾給使用者一句可直接複製的指令："
+        "事情已告一段落 → /clear；做到一半 → /compact 保留<替使用者寫好要保留的決定與進度>；"
+        "後半段多是除錯或探索雜訊 → /rewind 選<指出從哪一則訊息開始>，再按 Summarize from here。"
+        "並說明不處理的話，接近 context 上限時會自動壓縮，時機和重點都不是自己選的。"
+    )
 
 
 def main():
@@ -91,14 +107,7 @@ def main():
         return
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "UserPromptSubmit",
-        "additionalContext": (
-            f"目前對話的 context 約為 {now // 1000}k tokens，已超過 {THRESHOLD // 1000}k 的提醒門檻。"
-            "smart-agent-route 的 handoff skill 用於此時：先更新交接筆記"
-            "（不論使用者是否 /clear），再依當下情況，在回答結尾給使用者一句可直接複製的指令："
-            "事情已告一段落 → /clear；做到一半 → /compact 保留<替使用者寫好要保留的決定與進度>；"
-            "後半段多是除錯或探索雜訊 → /rewind 選<指出從哪一則訊息開始>，再按 Summarize from here。"
-            + closing()
-        ),
+        "additionalContext": reminder(now),
     }}, ensure_ascii=False))
 
 

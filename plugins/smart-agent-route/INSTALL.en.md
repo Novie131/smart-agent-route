@@ -52,7 +52,7 @@ Add `--with-statusline` (it can be combined with the default copy mode or `--lin
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }
 ```
 
-We also recommend `"autoCompactWindow": 183000` (the script does not write it): after subtracting a buffer of about 33k, auto-compact triggers at roughly 150k, leaving about 30k of headroom after the 120k reminder to write the handoff. The 33k figure was measured on the author's machine; confirm it with `/context` after installing.
+We also recommend `"autoCompactWindow": 153000` (the script does not write it): after subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, leaving about 20k of headroom after the 100k reminder to write the handoff; the handoff is injected back automatically after compaction. The 33k figure was measured on the author's machine; after writing the value, confirm with `/context` that the compact point is about 120k.
 
 ### Verify
 

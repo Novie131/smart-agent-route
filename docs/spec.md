@@ -77,7 +77,7 @@ worker 從 0.6 的 `low` 改為 `medium`:執行層做錯由主對話收拾的成
 
 ## 省 token 的四個槓桿
 
-0. **對話長度**(實測最大)。21 個 session、約 2,000 次呼叫的實測:主對話每次呼叫的 context 中位數約 24 萬 token,快取讀取約 4.9 億 vs 輸出 240 萬——錢花在每輪重讀舊對話。→ hook 在 12 萬 token 時提醒、之後每 4 萬再提醒;handoff skill 寫下現況後 `/clear`;建議另設 `autoCompactWindow: 183000` 當保險。
+0. **對話長度**(實測最大)。21 個 session、約 2,000 次呼叫的實測:主對話每次呼叫的 context 中位數約 24 萬 token,快取讀取約 4.9 億 vs 輸出 240 萬——錢花在每輪重讀舊對話。→ hook 在 10 萬 token 時提醒、之後每 4 萬再提醒;handoff skill 寫下現況;建議另設 `autoCompactWindow: 153000`(約 12 萬自動壓縮),壓縮後自動帶回 handoff(見 0.8 全自動 context 管理)。
 1. **Context 隔離**(複利)。對話中每則訊息在後續每一輪都會重送。30 次工具呼叫留在主對話 = 被反覆計費到對話結束;派給 subagent 則主對話只收摘要。→ **整包派工,不要一件一件派**,每次啟動 subagent 都要重付系統提示與記憶注入。
 2. **模型分層**。線性效果,省的比例約等於價差比例。
 3. **`effort`**。librarian `low`、worker `medium`、worker-hard `high`。依失敗代價配置,不是一律壓低。
@@ -315,7 +315,7 @@ claude-memory/
 
 **SessionStart hook**(matcher `startup|clear|compact`)— 輸出 `guide.md`,再附 `claude-memory/MEMORY.md`(≤120 行)與 `handoff.md`(≤80 行),兩者都略過 HTML 註解與空行。`resume` 不觸發,因為恢復的對話已含先前帶入的內容。
 
-**UserPromptSubmit hook** — 從 `transcript_path` 讀主對話(排除 sidechain)最後一次呼叫的 input + cache 讀寫 token;以 12 萬為門檻、每 4 萬一格,「上次在哪一格」記在 `${CLAUDE_PLUGIN_DATA}/.context-check-state.json`(只比最後兩次呼叫會漏掉回合中途跨門檻的情況)。跨進新的一格才以 `additionalContext` 提醒一次,文字用陳述語氣。
+**UserPromptSubmit hook** — 從 `transcript_path` 讀主對話(排除 sidechain)最後一次呼叫的 input + cache 讀寫 token;以 10 萬為門檻(預設值集中在 `compact.py` 的 `DEFAULT_REMIND`)、每 4 萬一格,「上次在哪一格」記在 `${CLAUDE_PLUGIN_DATA}/.context-check-state.json`(只比最後兩次呼叫會漏掉回合中途跨門檻的情況)。跨進新的一格才以 `additionalContext` 提醒一次,文字用陳述語氣。
 
 ## 0.8 回報選擇題
 
@@ -334,17 +334,29 @@ worker、worker-hard、bulk 的回報前兩行固定:
 
 ## 0.8 context 可見性
 
-- `compact.py` 的 `compact_point()`:讀 `~/.claude/settings.json` 的 `autoCompactWindow`,減 buffer(預設 33000,實測 183000 時 `/context` 顯示 33k、約 150k 壓縮;環境變數 `CONTEXT_AUTOCOMPACT_BUFFER` 可覆寫)。沒設定、讀不到、JSON 壞掉回 None。
-- `statusline.py`:`模型 │ ctx Nk │ 提醒 120k │ 壓縮 150k`。用 `context_window.total_input_tokens`(缺時加總 `current_usage`),不用 `used_percentage`(以完整視窗算,1M 模型 12 萬只顯示 12%)。plugin 不能設主狀態列;`install.sh --with-statusline` 只在使用者沒有 `statusLine` 時寫入(先備份),絕不碰其他鍵,也不寫 `autoCompactWindow`。
+- `compact.py` 的 `compact_point()`:讀 `~/.claude/settings.json` 的 `autoCompactWindow`,減 buffer(預設 33000,作者機器實測 183000 時 `/context` 顯示 33k(是否固定值未知);建議值 153000 約 120k 壓縮,寫入後請用 `/context` 確認;環境變數 `CONTEXT_AUTOCOMPACT_BUFFER` 可覆寫)。沒設定、讀不到、JSON 壞掉回 None。
+- `statusline.py`:`模型 │ ctx Nk │ 提醒 100k │ 壓縮 120k`。用 `context_window.total_input_tokens`(缺時加總 `current_usage`),不用 `used_percentage`(以完整視窗算,1M 模型 10 萬只顯示 10%)。plugin 不能設主狀態列;`install.sh --with-statusline` 只在使用者沒有 `statusLine` 時寫入(先備份),絕不碰其他鍵,也不寫 `autoCompactWindow`。
 - context-check 的提醒文字在壓縮點已知時帶入「約 Nk 會自動壓縮」,import 失敗退回原句。
 - guide.md 加兩條:持續萃取 handoff、實作派 worker 不派 general-purpose(實測曾有 408 次實作跑在 Opus)。
+
+## 0.8 全自動 context 管理
+
+目標:使用者不需要手動 `/clear`。流程:
+
+1. context 到 10 萬(`DEFAULT_REMIND`,可用 `CONTEXT_REMIND_TOKENS` 覆寫):UserPromptSubmit hook 提醒;有設 `autoCompactWindow` 時,Claude 先依 handoff skill 更新 `handoff.md`,再用一句話告知「約 N k 會自動壓縮、壓縮後自動帶回交接筆記」,不再給 /compact、/rewind 指令選單;沒設才維持三選一可複製指令。
+2. 約 12 萬(`autoCompactWindow` 153000 扣 buffer 約 33k;buffer 是作者機器實測、未確認固定,寫入後用 `/context` 確認):Claude Code 自動壓縮。10 萬提醒到 12 萬壓縮之間留 2 萬緩衝寫 handoff。
+3. 壓縮後 SessionStart(matcher `startup|clear|compact`)hook 自動帶回 handoff 全文:專案有 `claude-memory/` 就用它;沒有時從 stdin JSON 的 `transcript_path` 取上層目錄的 `memory/handoff.md`(去掉 HTML 註解與空行,上限 80 行,標題寫明路徑)。仍刻意不帶 auto memory 的 `MEMORY.md`(Claude Code 本來就會帶,重複只會多付費)。
+
+為何 auto memory 使用者以前會漏讀 handoff:Claude Code 只自動帶入 auto memory 的 `MEMORY.md` 索引,索引裡指向 handoff.md 的那一行得靠模型自己想到去讀,壓縮或 /clear 後常常沒讀;只有 `claude-memory/` 的使用者有 hook 帶入全文。
+
+取捨:每次壓縮多一次摘要輸出、會停頓一下;換來不用手動,且 context 上限壓在約 12 萬(原本建議值 183000 約 15 萬壓縮)。換主題時仍建議開新對話或 `/clear`:新對話不帶舊歷史,比壓縮後的摘要更便宜。
 
 ## 0.8 安裝後零手動
 
 目標：裝完即可用；完整功能由一個互動 skill 帶使用者做，而不是要求讀文件手動改設定。
 
 - **記憶退回 auto memory。** 沒有 `claude-memory/` 時：librarian 在 `claude-memory/` 之後搜 auto memory 目錄（`~/.claude/projects/<專案路徑把 / 換成 ->/memory/`）；harvester 寫入退回該目錄（筆記放 `kb/`，索引行寫進它的 `MEMORY.md`，保持精簡）；research 存到其 `web/`，`MEMORY.md` 只加一行指向 `web/INDEX.md`（取代原本的「不存檔」）。session-start.sh 沒有 `claude-memory/` 時**不**帶入 auto memory 的 `MEMORY.md`，因為 Claude Code 本來就會自己帶。
-- **`route-setup` skill**（`disable-model-invocation: true`，只能由使用者呼叫）。逐項說明「做什麼 → 影響 → 怎麼還原」，一次問一項、可略過：記憶、Haiku Explore、`autoCompactWindow` 183000、狀態列、模型（只回報不強改）。結束寫完成標記（全部略過也寫）。
+- **`route-setup` skill**（`disable-model-invocation: true`，只能由使用者呼叫）。逐項說明「做什麼 → 影響 → 怎麼還原」，一次問一項、可略過：記憶、Haiku Explore、`autoCompactWindow` 153000、狀態列、模型（只回報不強改）。結束寫完成標記（全部略過也寫）。
 - **`apply_settings.py`**（標準函式庫）是唯一寫 `settings.json` 的路徑：只碰 `statusLine` 與 `autoCompactWindow`；已有值不覆蓋（結束碼 3）；JSON 壞掉或最外層不是物件不寫（結束碼 2）；寫前備份 `settings.json.bak-<時間>`；暫存檔＋`os.replace` 整份寫回；檔案不存在就建立。`install.sh --with-statusline` 也呼叫它。工具呼叫被權限擋下時，skill 不重試不繞路，把完整指令交給使用者以 `! <指令>` 自己執行。
 - **狀態列檔案放固定位置。** user settings 不會展開 `${CLAUDE_PLUGIN_ROOT}`，而快取目錄含版本號、升級即失效，所以 plugin 安裝時把 `statusline.py`、`compact.py` 複製到 `~/.claude/smart-agent-route/statusline/`；session-start.sh 之後在該目錄存在時自動同步（內容不同才複製，目的地是符號連結不動）。
 - **session-start.sh 的提示。** 標記檔 `${CLAUDE_PLUGIN_DATA:-$HOME/.claude/hooks}/.route-setup-done` 不存在且 `.route-setup-shown` 計數 < 3 時，輸出 JSON：`systemMessage` 一句話提示 route-setup，原本的全部文字放 `hookSpecificOutput.additionalContext`，並計數加 1；其他情況照舊輸出純文字。只用 sh 與 awk，JSON 跳脫 `\`、`"`、換行、tab 與其他控制字元，任何錯誤安靜結束。`hooks.json` 不新增 hook。

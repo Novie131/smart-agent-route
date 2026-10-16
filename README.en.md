@@ -83,7 +83,7 @@ What each component is for:
 
 The cost still works out: planning is one message, while an execution loop is often dozens of tool calls. The biggest saving, though, is **context isolation**. Every message in a conversation is resent on every later turn; keeping tool calls inside a subagent's separate context window means the main conversation receives only a summary.
 
-**But isolation only covers tool calls, not the conversation itself growing longer.** Measured on one heavy user across 21 sessions, the median context per main-conversation call was about 240k tokens, mostly re-reading old conversation. So the plugin also watches length: it reminds you past 120k tokens, you write the current state with the handoff skill and run `/clear`, and the new session picks up automatically.
+**But isolation only covers tool calls, not the conversation itself growing longer.** Measured on one heavy user across 21 sessions, the median context per main-conversation call was about 240k tokens, mostly re-reading old conversation. So the plugin also watches length: it reminds you past 100k tokens, Claude writes the current state with the handoff skill, auto-compact triggers at about 120k, and the handoff is injected back automatically afterwards, so no manual `/clear` is needed.
 
 Design rationale and trade-offs are in [docs/spec.md](docs/spec.md) (Traditional Chinese).
 
@@ -144,17 +144,17 @@ Four levers, in order of impact:
 1. **Context isolation** (the biggest, and it compounds). Every message and tool result is resent on each later turn. Running 30 tool calls in the main conversation means paying for those 30 results until the conversation ends; in a subagent, the main conversation receives only a summary. Delegate whole chunks of work, not single steps, because each subagent launch pays the system prompt and memory injection again.
 2. **Model tiering.** Useful but linear: the saving is roughly the price difference.
 3. **`effort` levels.** worker uses `medium`, escalating to worker-hard (`high`) only on failure; librarian uses `low`.
-4. **Do not keep the main conversation open too long.** An Opus conversation that keeps growing is the quietest leak. The UserPromptSubmit hook reminds you once when the context passes 120k tokens, then every additional 40k (adjust the threshold with the environment variable `CONTEXT_REMIND_TOKENS`). On reminder, Claude writes the current state into `handoff.md` with the handoff skill (current task / done / next steps / open questions), then gives you a copyable command: `/clear` if you are at a stopping point, `/compact` with a focus if you are mid-task, or `/rewind` with a partial summary if the later part is debugging noise. The SessionStart hook injects `claude-memory/handoff.md` into the next session.
+4. **Do not keep the main conversation open too long.** An Opus conversation that keeps growing is the quietest leak. The UserPromptSubmit hook reminds you once when the context passes 100k tokens, then every additional 40k (adjust the threshold with the environment variable `CONTEXT_REMIND_TOKENS`). On reminder, Claude writes the current state into `handoff.md` with the handoff skill (current task / done / next steps / open questions). If `autoCompactWindow` is set (below), it then just tells you auto-compact will happen at about N k and the handoff will be restored; otherwise it gives you a copyable command: `/clear` at a stopping point, `/compact` with a focus mid-task, or `/rewind` with a partial summary if the later part is debugging noise. The SessionStart hook injects `handoff.md` after every compact, `/clear` and startup: from `claude-memory/` if the project has it, otherwise from the auto memory directory next to the transcript (Claude Code only injects the MEMORY.md index of auto memory, never handoff.md). Starting a new conversation or `/clear` when a topic ends is still cheaper.
 
 Recommended: set auto-compact as a safety net in `~/.claude/settings.json` (a plugin cannot set it for you; `/smart-agent-route:route-setup` writes it safely):
 
 ```
-"autoCompactWindow": 183000
+"autoCompactWindow": 153000
 ```
 
-After subtracting a buffer of about 33k, auto-compact triggers at roughly 150k, leaving about 30k of headroom after the 120k reminder to write the handoff. The 33k figure was measured on the author's machine; confirm the Autocompact buffer with `/context` (and also check any per-model overrides in `modelSettings`).
+After subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, leaving about 20k of headroom after the 100k reminder to write the handoff. The 33k figure was measured on the author's machine (it is not known to be fixed); after writing the value, confirm with `/context` that the Autocompact buffer is about 33k and the compact point about 120k (and also check any per-model overrides in `modelSettings`).
 
-**Status line** (optional): shows `model │ ctx 95k │ reminder 120k │ compact 150k`, with the compact point read from `autoCompactWindow` (not shown if unset). A plugin cannot configure the main status line, so use `bash install.sh --with-statusline`, or paste this into settings.json by hand (this path applies only to install.sh installs; plugin users should use `/smart-agent-route:route-setup`, which places the file in a fixed location):
+**Status line** (optional): shows `model │ ctx 95k │ reminder 100k │ compact 120k`, with the compact point read from `autoCompactWindow` (not shown if unset). A plugin cannot configure the main status line, so use `bash install.sh --with-statusline`, or paste this into settings.json by hand (this path applies only to install.sh installs; plugin users should use `/smart-agent-route:route-setup`, which places the file in a fixed location):
 
 ```json
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }

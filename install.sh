@@ -175,8 +175,8 @@ setup_statusline() {
 print_statusline_tips() {
   say ""
   say "建議另外在 ~/.claude/settings.json 加(本腳本不會寫):"
-  say '  "autoCompactWindow": 183000'
-  say "裝好後用 /context 確認 Autocompact buffer(實測約 33k,約 150k 壓縮);有 modelSettings 逐模型覆蓋時要一併看。"
+  say '  "autoCompactWindow": 153000'
+  say "裝好後用 /context 確認 Autocompact buffer(作者機器實測約 33k,約 120k 壓縮;提醒 10 萬後留 2 萬緩衝寫 handoff);有 modelSettings 逐模型覆蓋時要一併看。"
 }
 
 # ---------- 清掉舊版錯誤的安裝位置 ----------

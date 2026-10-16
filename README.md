@@ -54,7 +54,7 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒
 
 成本上仍划算:規劃是一則訊息,執行迴圈常是數十次工具呼叫。而且最大的一筆省在 **context 隔離** —— 對話中每則訊息在後續每一輪都會重送,把工具呼叫關進 subagent 的獨立 context,主對話只收摘要。
 
-**但隔離只管得到工具呼叫,管不到對話本身變長。** 實測一個重度使用者 21 個 session,主對話每次呼叫的 context 中位數約 24 萬 token,大多是在重讀舊對話。所以 plugin 另外盯著長度:超過 12 萬 token 時提醒,用 handoff skill 寫下現況後 `/clear`,新 session 自動接手。
+**但隔離只管得到工具呼叫,管不到對話本身變長。** 實測一個重度使用者 21 個 session,主對話每次呼叫的 context 中位數約 24 萬 token,大多是在重讀舊對話。所以 plugin 另外盯著長度:超過 10 萬 token 時提醒,Claude 用 handoff skill 寫下現況,約 12 萬自動壓縮,壓縮後新 context 自動帶回交接筆記,不用手動 `/clear`。
 
 設計理由與取捨見 [docs/spec.md](docs/spec.md)。
 

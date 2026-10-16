@@ -7,6 +7,15 @@ buffer 預設 33000（本機實測值，用 /context 確認），可用環境變
 import json, os
 
 DEFAULT_BUFFER = 33000
+DEFAULT_REMIND = 100000  # 提醒門檻預設值的唯一來源（usage_stats.py 在別的目錄，另寫一份 100000）
+
+
+def remind_tokens():
+    """提醒門檻（tokens）：環境變數 CONTEXT_REMIND_TOKENS，沒設或不是整數就用 DEFAULT_REMIND。"""
+    try:
+        return int(os.environ.get("CONTEXT_REMIND_TOKENS", DEFAULT_REMIND))
+    except ValueError:
+        return DEFAULT_REMIND
 
 
 def compact_point():

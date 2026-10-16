@@ -39,11 +39,11 @@ class ApplySettingsTest(unittest.TestCase):
         self.assertIn("description:", head)
 
     def test_creates_missing_file(self):
-        r = self.run_apply("--set-statusline", self.cmd, "--set-autocompact", "183000")
+        r = self.run_apply("--set-statusline", self.cmd, "--set-autocompact", "153000")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(self.path.read_text()),
                          {"statusLine": {"type": "command", "command": self.cmd},
-                          "autoCompactWindow": 183000})
+                          "autoCompactWindow": 153000})
         self.assertEqual(self.baks(), [])
 
     def test_creates_parent_directory(self):
@@ -57,7 +57,7 @@ class ApplySettingsTest(unittest.TestCase):
                 "model": "opus", "note": "中文", "autoCompactWindow": 100000}
         text = json.dumps(orig, ensure_ascii=False)
         self.path.write_text(text, encoding="utf-8")
-        r = self.run_apply("--set-statusline", self.cmd, "--set-autocompact", "183000")
+        r = self.run_apply("--set-statusline", self.cmd, "--set-autocompact", "153000")
         self.assertEqual(r.returncode, 3)  # autoCompactWindow 已存在
         data = json.loads(self.path.read_text())
         self.assertEqual(data.pop("statusLine"), {"type": "command", "command": self.cmd})
@@ -87,12 +87,12 @@ class ApplySettingsTest(unittest.TestCase):
                 self.assertEqual(self.baks(), [])
 
     def test_dry_run_writes_nothing(self):
-        r = self.run_apply("--set-autocompact", "183000", "--dry-run")
+        r = self.run_apply("--set-autocompact", "153000", "--dry-run")
         self.assertEqual(r.returncode, 0)
         self.assertFalse(self.path.exists())
         text = '{"a": 1}'
         self.path.write_text(text)
-        r = self.run_apply("--set-autocompact", "183000", "--dry-run")
+        r = self.run_apply("--set-autocompact", "153000", "--dry-run")
         self.assertEqual(r.returncode, 0)
         self.assertEqual(self.path.read_text(), text)
         self.assertEqual(self.baks(), [])

@@ -15,7 +15,7 @@ def env_threshold():
     try:
         return int(os.environ.get("CONTEXT_REMIND_TOKENS", ""))
     except ValueError:
-        return 120000
+        return 100000  # 與 hooks/compact.py 的 DEFAULT_REMIND 同值（此檔在別的目錄，不 import）
 
 
 def num(u, key):

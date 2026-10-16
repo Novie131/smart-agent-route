@@ -24,19 +24,19 @@ smart-agent-route 裝完就能用；這個 skill 只是把「想要完整功能�
 - `~/.claude/agents/Explore.md` 已存在就不覆蓋，只告知。
 - 還原：刪掉 `~/.claude/agents/Explore.md`。
 
-## 3. autoCompactWindow 183000
+## 3. autoCompactWindow 153000
 
-- 做什麼：在 `~/.claude/settings.json` 加 `"autoCompactWindow": 183000`，當作忘記 `/clear` 時的保險（扣掉 buffer 後約 150k 壓縮，120k 提醒後留緩衝寫 handoff）。
+- 做什麼：在 `~/.claude/settings.json` 加 `"autoCompactWindow": 153000`，讓對話約 12 萬自動壓縮（扣掉 buffer 後）；10 萬提醒後留 2 萬緩衝寫 handoff，壓縮後 SessionStart hook 會自動帶回交接筆記，不需要手動 /clear。
 - 先跑 `python3 "${CLAUDE_SKILL_DIR}/apply_settings.py" --status`：
   - `autoCompactWindow` 已有值 → **不覆蓋**，只告知現值並詢問使用者要不要自己改。
   - `modelSettingsOverridesAutoCompact` 為 true → 提醒有逐模型覆蓋，那些模型不吃這個全域值。
-- 使用者同意才執行 `python3 "${CLAUDE_SKILL_DIR}/apply_settings.py" --set-autocompact 183000`。
-- 寫入後請使用者用 `/context` 確認 Autocompact buffer（33k 只是作者機器的實測值，以他看到的為準）。
+- 使用者同意才執行 `python3 "${CLAUDE_SKILL_DIR}/apply_settings.py" --set-autocompact 153000`。
+- 寫入後請使用者用 `/context` 確認 Autocompact buffer（33k 只是作者機器的實測值，以他看到的為準）；壓縮點應約 120k，不是的話請他回報，再調整數值。
 - 還原：把 `settings.json.bak-<時間>` 改回 `settings.json`，或手動刪掉該鍵。
 
 ## 4. 狀態列
 
-- 做什麼：把 `statusLine` 指到本 plugin 的 `statusline.py`，顯示 `模型 │ ctx 95k │ 提醒 120k │ 壓縮 150k`。
+- 做什麼：把 `statusLine` 指到本 plugin 的 `statusline.py`，顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k`。
 - 先決定指令路徑：
   - `~/.claude/hooks/smart-agent-route/statusline.py` 存在（install.sh 安裝）→ 指令用 `python3 ~/.claude/hooks/smart-agent-route/statusline.py`。
   - 否則（plugin 安裝）→ 先把 `statusline.py` 與 `compact.py` 複製到固定位置 `~/.claude/smart-agent-route/statusline/`（來源是 `${CLAUDE_PLUGIN_ROOT}/hooks/`；沒有這個變數就用 `${CLAUDE_SKILL_DIR}/../../hooks/`）。**不能直接指向 plugin 快取**（目錄含版本號，升級會失效；user settings 也不會展開 `${CLAUDE_PLUGIN_ROOT}`）。指令用 `python3 ~/.claude/smart-agent-route/statusline/statusline.py`。之後 plugin 升級時，session 開始的 hook 會自動把這兩個檔同步過去。

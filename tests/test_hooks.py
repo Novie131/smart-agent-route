@@ -77,16 +77,33 @@ class ContextCheckTest(unittest.TestCase):
         (self.home / ".claude" / "settings.json").write_text(text)
 
     def test_reminder_with_compact_point(self):
-        self.write_settings(json.dumps({"autoCompactWindow": 183000}))
+        self.write_settings(json.dumps({"autoCompactWindow": 153000}))
         out = json.loads(self.run_payload(self.transcript("e.jsonl", [100, 5000])).stdout)
         text = out["hookSpecificOutput"]["additionalContext"]
-        self.assertIn("約 150k 會自動壓縮，時機和重點都不是自己選的。", text)
+        self.assertIn("handoff skill 先更新交接筆記", text)
+        self.assertIn("約 120k 會自動壓縮，壓縮後會自動帶回交接筆記，不需要手動處理", text)
+        self.assertIn("換新對話或 /clear 更省", text)
+        self.assertNotIn("/compact 保留", text)
+        self.assertNotIn("/rewind 選", text)
         self.assertNotIn("接近 context 上限", text)
 
     def test_reminder_without_compact_point(self):
         out = json.loads(self.run_payload(self.transcript("f.jsonl", [100, 5000])).stdout)
         text = out["hookSpecificOutput"]["additionalContext"]
         self.assertTrue(text.endswith("並說明不處理的話，接近 context 上限時會自動壓縮，時機和重點都不是自己選的。"))
+        self.assertIn("/compact 保留", text)
+        self.assertIn("/rewind 選", text)
+
+    def test_default_threshold_is_100k(self):
+        env = self.env()
+        env.pop("CONTEXT_REMIND_TOKENS")
+        def run(p):
+            return subprocess.run([sys.executable, str(CONTEXT_CHECK)],
+                                  input=json.dumps({"transcript_path": str(p)}), text=True,
+                                  capture_output=True, env=env, timeout=30)
+        self.assertEqual(run(self.transcript("g.jsonl", [99000])).stdout, "")
+        out = json.loads(run(self.transcript("h.jsonl", [99000, 100000])).stdout)
+        self.assertIn("已超過 100k 的提醒門檻", out["hookSpecificOutput"]["additionalContext"])
 
     def test_bad_input_is_quiet(self):
         cases = [
@@ -130,8 +147,14 @@ class CompactPointTest(HomeCase):
         return r.stdout.strip()
 
     def test_value(self):
-        self.settings('{"autoCompactWindow": 183000}')
-        self.assertEqual(self.point(), "150000")
+        self.settings('{"autoCompactWindow": 153000}')
+        self.assertEqual(self.point(), "120000")
+
+    def test_remind_tokens(self):
+        code = f"import sys; sys.path.insert(0, {str(HOOKS)!r}); from compact import remind_tokens; print(remind_tokens())"
+        self.assertEqual(self.run_py(["-c", code]).stdout.strip(), "100000")
+        self.assertEqual(self.run_py(["-c", code], CONTEXT_REMIND_TOKENS="70000").stdout.strip(), "70000")
+        self.assertEqual(self.run_py(["-c", code], CONTEXT_REMIND_TOKENS="abc").stdout.strip(), "100000")
 
     def test_not_set(self):
         self.settings("{}")
@@ -145,12 +168,12 @@ class CompactPointTest(HomeCase):
         self.assertEqual(self.point(), "None")
 
     def test_non_integer(self):
-        self.settings('{"autoCompactWindow": "183000"}')
+        self.settings('{"autoCompactWindow": "153000"}')
         self.assertEqual(self.point(), "None")
 
     def test_buffer_env(self):
-        self.settings('{"autoCompactWindow": 183000}')
-        self.assertEqual(self.point(CONTEXT_AUTOCOMPACT_BUFFER="40000"), "143000")
+        self.settings('{"autoCompactWindow": 153000}')
+        self.assertEqual(self.point(CONTEXT_AUTOCOMPACT_BUFFER="40000"), "113000")
 
 
 class StatuslineTest(HomeCase):
@@ -163,16 +186,16 @@ class StatuslineTest(HomeCase):
         return {"model": {"display_name": "Opus"}, "context_window": {"total_input_tokens": n}}
 
     def test_colors(self):
-        self.settings('{"autoCompactWindow": 183000}')
-        for n, color in ((79999, self.GREEN), (80000, self.YELLOW), (119999, self.YELLOW), (120000, self.RED)):
+        self.settings('{"autoCompactWindow": 153000}')
+        for n, color in ((79999, self.GREEN), (80000, self.YELLOW), (99999, self.YELLOW), (100000, self.RED)):
             with self.subTest(n=n):
                 r = self.run_sl(self.payload(n))
                 self.assertEqual(r.returncode, 0)
-                self.assertEqual(r.stdout, f"Opus │ {color}ctx {n // 1000}k{self.RESET} │ 提醒 120k │ 壓縮 150k\n")
+                self.assertEqual(r.stdout, f"Opus │ {color}ctx {n // 1000}k{self.RESET} │ 提醒 100k │ 壓縮 120k\n")
 
     def test_without_compact_segment(self):
         r = self.run_sl(self.payload(50000))
-        self.assertEqual(r.stdout, f"Opus │ {self.GREEN}ctx 50k{self.RESET} │ 提醒 120k\n")
+        self.assertEqual(r.stdout, f"Opus │ {self.GREEN}ctx 50k{self.RESET} │ 提醒 100k\n")
 
     def test_remind_env(self):
         r = self.run_sl(self.payload(50000), CONTEXT_REMIND_TOKENS="60000")
@@ -207,7 +230,7 @@ class SessionStartTest(unittest.TestCase):
         self.data = self.tmp / "data"
         self.first_line = GUIDE.read_text().strip().splitlines()[0]
 
-    def run_hook(self, script=SESSION_START, data="default", plugin_root=None):
+    def run_hook(self, script=SESSION_START, data="default", plugin_root=None, stdin=None):
         env = os.environ.copy()
         env["HOME"] = str(self.home)
         env["CLAUDE_PROJECT_DIR"] = str(self.proj)
@@ -220,7 +243,8 @@ class SessionStartTest(unittest.TestCase):
         if plugin_root:
             env["CLAUDE_PLUGIN_ROOT"] = str(plugin_root)
         return subprocess.run(["sh", str(script)], capture_output=True, text=True,
-                              env=env, cwd=self.proj, timeout=30, stdin=subprocess.DEVNULL)
+                              env=env, cwd=self.proj, timeout=30,
+                              **({"input": stdin} if stdin is not None else {"stdin": subprocess.DEVNULL}))
 
     def shown(self):
         p = self.data / ".route-setup-shown"
@@ -251,6 +275,96 @@ class SessionStartTest(unittest.TestCase):
         self.assertIn(self.first_line, r.stdout)
         self.assertNotIn("# 記憶索引（", r.stdout)
         self.assertNotIn("AUTO_MEMORY_MARKER", r.stdout)
+
+    def auto_memory(self, dirname="-Users-x-proj"):
+        """假的 auto memory：回傳 (transcript_path, memory 目錄)。"""
+        proj = self.home / ".claude" / "projects" / dirname
+        (proj / "memory").mkdir(parents=True)
+        (proj / "memory" / "MEMORY.md").write_text("AUTO_MEMORY_MARKER\n")
+        (proj / "memory" / "handoff.md").write_text("<!-- 註解 -->\nAUTO_HANDOFF_MARKER\n\n第二行\n")
+        return proj / "abc.jsonl", proj / "memory"
+
+    def mark_done(self):
+        self.data.mkdir()
+        (self.data / ".route-setup-done").touch()
+
+    def payload(self, path):
+        return json.dumps({"transcript_path": str(path), "source": "compact"})
+
+    def test_auto_memory_handoff_loaded_via_stdin(self):
+        self.mark_done()
+        tp, mem = self.auto_memory()
+        r = self.run_hook(stdin=self.payload(tp))
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stderr, "")
+        self.assertIn("AUTO_HANDOFF_MARKER", r.stdout)
+        self.assertIn("第二行", r.stdout)
+        self.assertIn(str(mem / "handoff.md"), r.stdout)
+        self.assertNotIn("註解", r.stdout)
+        self.assertNotIn("AUTO_MEMORY_MARKER", r.stdout)
+        self.assertNotIn("# 記憶索引（", r.stdout)
+
+    def test_auto_memory_handoff_capped_at_80_lines(self):
+        self.mark_done()
+        tp, mem = self.auto_memory()
+        (mem / "handoff.md").write_text("".join(f"LINE{i}\n" for i in range(200)))
+        r = self.run_hook(stdin=self.payload(tp))
+        self.assertIn("LINE79\n", r.stdout)
+        self.assertNotIn("LINE80\n", r.stdout)
+
+    def test_auto_memory_path_with_spaces_and_escapes(self):
+        self.mark_done()
+        tp, mem = self.auto_memory("-Users-x-my proj")
+        # JSON 跳脫：反斜線 \\ 與 \" 不會出現在一般路徑，但格式要能被正確解析
+        raw = '{"session_id":"s","transcript_path" : "%s","source":"startup"}' % tp
+        r = self.run_hook(stdin=raw)
+        self.assertIn("AUTO_HANDOFF_MARKER", r.stdout)
+
+    def test_stdin_json_escaped_path(self):
+        self.mark_done()
+        tp, mem = self.auto_memory('-Users-x-q"uote')
+        r = self.run_hook(stdin=json.dumps({"transcript_path": str(tp)}))
+        self.assertIn("AUTO_HANDOFF_MARKER", r.stdout)
+
+    def test_claude_memory_wins_over_auto_memory(self):
+        self.mark_done()
+        tp, _ = self.auto_memory()
+        cm = self.proj / "claude-memory"
+        cm.mkdir()
+        (cm / "handoff.md").write_text("CLAUDE_MEMORY_HANDOFF\n")
+        r = self.run_hook(stdin=self.payload(tp))
+        self.assertIn("CLAUDE_MEMORY_HANDOFF", r.stdout)
+        self.assertNotIn("AUTO_HANDOFF_MARKER", r.stdout)
+
+    def test_bad_stdin_is_quiet(self):
+        self.mark_done()
+        tp, _ = self.auto_memory()
+        cases = ["", "not json", "[]", '{"transcript_path": 5}', '{"transcript_path": "unterminated',
+                 json.dumps({"transcript_path": str(self.tmp / "nowhere" / "x.jsonl")}),
+                 json.dumps({"transcript_path": "noslash"})]
+        for stdin in cases:
+            with self.subTest(stdin=stdin):
+                r = self.run_hook(stdin=stdin)
+                self.assertEqual(r.returncode, 0)
+                self.assertEqual(r.stderr, "")
+                self.assertIn(self.first_line, r.stdout)
+                self.assertNotIn("AUTO_HANDOFF_MARKER", r.stdout)
+
+    def test_no_handoff_file_in_auto_memory(self):
+        self.mark_done()
+        tp, mem = self.auto_memory()
+        (mem / "handoff.md").unlink()
+        r = self.run_hook(stdin=self.payload(tp))
+        self.assertNotIn("上一個對話留下的交接筆記", r.stdout)
+
+    def test_json_mode_includes_auto_handoff(self):
+        tp, mem = self.auto_memory()
+        r = self.run_hook(stdin=self.payload(tp))
+        d = json.loads(r.stdout)
+        ctx = d["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("route-setup", d["systemMessage"])
+        self.assertIn("AUTO_HANDOFF_MARKER", ctx)
+        self.assertNotIn("AUTO_MEMORY_MARKER", ctx)
 
     def test_no_marker_outputs_json(self):
         r = self.run_hook()

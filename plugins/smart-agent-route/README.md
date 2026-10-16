@@ -232,13 +232,13 @@ Opus 掛著一段長對話是最安靜的漏斗——整段歷史每輪重送一
 
 所以這一項不只靠自覺:
 
-- **UserPromptSubmit hook** 在 context 超過 12 萬 token 時提醒一次,之後每多 4 萬再提醒(門檻可用環境變數 `CONTEXT_REMIND_TOKENS` 調整)
-- 提醒時 Claude 會用 **handoff skill** 把現況寫進 `handoff.md`(目前任務 / 已完成 / 下一步 / 未決問題),再依情況給你一句可直接複製的指令:告一段落 `/clear`、做到一半 `/compact 保留…`、後半段是除錯雜訊就 `/rewind` 局部摘要
-- 新 session 開始時 **SessionStart hook** 自動帶入 `claude-memory/handoff.md`,直接接手
+- **UserPromptSubmit hook** 在 context 超過 10 萬 token 時提醒一次,之後每多 4 萬再提醒(門檻可用環境變數 `CONTEXT_REMIND_TOKENS` 調整)
+- 提醒時 Claude 會用 **handoff skill** 把現況寫進 `handoff.md`(目前任務 / 已完成 / 下一步 / 未決問題)。有設 `autoCompactWindow`(見下)時只會告訴你「約 N k 會自動壓縮、壓縮後自動帶回交接筆記,不需手動處理」;沒設才給可複製的指令(告一段落 `/clear`、做到一半 `/compact 保留…`、後半段是除錯雜訊就 `/rewind` 局部摘要)
+- 每次壓縮、`/clear`、新 session 開始時 **SessionStart hook** 自動帶入 handoff.md:專案有 `claude-memory/` 就用它,否則用 transcript 旁 auto memory 目錄的 `handoff.md`(Claude Code 只會自動帶入 auto memory 的 MEMORY.md 索引,不會帶 handoff.md)。話題告一段落時,換新對話或 `/clear` 仍然更省
 
-建議另外在 `~/.claude/settings.json` 把自動壓縮當保險(plugin 不能代設，`/smart-agent-route:route-setup` 會幫你安全地寫入):`"autoCompactWindow": 183000`:扣掉約 33k 的 buffer 後約在 150k 自動壓縮,在 120k 提醒之後留 3 萬緩衝寫 handoff(33k 是本機實測值,請用 `/context` 確認 Autocompact buffer;有 `modelSettings` 逐模型覆蓋時要一併看)。
+建議另外在 `~/.claude/settings.json` 把自動壓縮當保險(plugin 不能代設，`/smart-agent-route:route-setup` 會幫你安全地寫入):`"autoCompactWindow": 153000`:扣掉約 33k 的 buffer 後約在 12 萬自動壓縮,在 10 萬提醒之後留 2 萬緩衝寫 handoff(33k 是作者機器的實測值,寫入後請用 `/context` 確認壓縮點約 120k;有 `modelSettings` 逐模型覆蓋時要一併看)。
 
-**狀態列**(選用):顯示 `模型 │ ctx 95k │ 提醒 120k │ 壓縮 150k`,壓縮點讀自 `autoCompactWindow`(沒設就不顯示)。plugin 不能設定主狀態列,用 `bash install.sh --with-statusline`,或手動貼進 settings.json(路徑只適用 install.sh 安裝;plugin 安裝的使用者請用 `/smart-agent-route:route-setup`，它會把檔案放到固定位置):
+**狀態列**(選用):顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k`,壓縮點讀自 `autoCompactWindow`(沒設就不顯示)。plugin 不能設定主狀態列,用 `bash install.sh --with-statusline`,或手動貼進 settings.json(路徑只適用 install.sh 安裝;plugin 安裝的使用者請用 `/smart-agent-route:route-setup`，它會把檔案放到固定位置):
 
 ```json
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }

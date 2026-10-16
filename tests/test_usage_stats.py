@@ -52,9 +52,16 @@ class UsageStatsTest(unittest.TestCase):
 
     def run_script(self, *args, root=None):
         r = subprocess.run([sys.executable, SCRIPT, "--root", root or self.root, *args],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=60, env=self.clean_env())
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout
+
+    @staticmethod
+    def clean_env():
+        env = os.environ.copy()
+        env.pop("CONTEXT_REMIND_TOKENS", None)
+        return env
 
     def test_dedup_median_threshold(self):
         out = self.run_script("--project", "alpha", "--since", "2026-10-01")
@@ -62,6 +69,10 @@ class UsageStatsTest(unittest.TestCase):
         self.assertIn("（3 次）", out)
         self.assertIn("中位數 200,000", out)
         self.assertIn("（2/3）", out)
+
+    def test_default_threshold_100k(self):
+        out = self.run_script("--project", "alpha", "--since", "2026-10-01")
+        self.assertIn("超過門檻 100,000 的呼叫比例", out)
 
     def test_threshold_option(self):
         out = self.run_script("--project", "alpha", "--since", "2026-10-01", "--threshold", "250000")

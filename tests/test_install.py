@@ -196,11 +196,11 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(p.read_text(), text)
         self.assertEqual(self.baks(), [])
         self.assertIn("statusline.py", r.stdout)
-        self.assertIn("183000", r.stdout)
+        self.assertIn("153000", r.stdout)
 
     def test_statusline_backup_and_keeps_keys(self):
         orig = {"permissions": {"allow": ["Bash(ls)"]}, "hooks": {"Stop": []},
-                "autoCompactWindow": 183000, "note": "中文"}
+                "autoCompactWindow": 153000, "note": "中文"}
         text = json.dumps(orig)
         p = self.user_file("settings.json", text)
         self.run_install("--with-statusline", "--link")

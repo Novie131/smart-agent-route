@@ -52,7 +52,7 @@ bash install.sh
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }
 ```
 
-另建議 `"autoCompactWindow": 183000`(腳本不會寫):扣掉約 33k buffer 後約 150k 壓縮,120k 提醒後留 3 萬緩衝寫 handoff。33k 是本機實測值,裝好後用 `/context` 確認。
+另建議 `"autoCompactWindow": 153000`(腳本不會寫):扣掉約 33k buffer 後約 120k 自動壓縮,10 萬提醒後留 2 萬緩衝寫 handoff,壓縮後自動帶回交接筆記。33k 是作者機器的實測值,寫入後用 `/context` 確認壓縮點約 120k。
 
 ### 驗證
 
