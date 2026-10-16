@@ -32,21 +32,29 @@
 bash install.sh
 ```
 
-腳本會把 plugin 解到 `~/.claude/skills/smart-agent-route/`,那裡的 plugin 會**自動載入**,不需要 marketplace、不需要 `/plugin install`。
+腳本會把 agent、skill、hook **複製**到 `~/.claude/`(`agents/*.md` → `~/.claude/agents/`、`skills/<名>/` → `~/.claude/skills/`、`hooks/` → `~/.claude/hooks/smart-agent-route/`),不需要 marketplace、不需要 `/plugin install`。注意 Claude Code 不會載入 `~/.claude/skills/` 底下的 plugin 資料夾,所以腳本是把內容拆開放,而不是整包塞進去;舊版腳本裝在 `~/.claude/skills/smart-agent-route/` 的殘留會被自動移除。
 
-裝完重開 Claude Code(或在既有 session 執行 `/reload-plugins`)。
+這個模式下名稱**不帶命名空間**:agent 叫 `worker`(不是 `smart-agent-route:worker`),skill 叫 `/handoff`。
+
+安裝過的項目會記在 `~/.claude/.smart-agent-route-installed`。已存在的同名檔:內容相同就納入清單,內容不同(你自己寫的)則不覆蓋並提醒;符號連結(`--link` 裝的)不動。
+
+**hook 不會自動啟用**:腳本不改你的 `settings.json`,結尾會印出一段設定片段,要自己合併進 `~/.claude/settings.json` 的 `"hooks"`(已有同類 hook 時先移除舊的)。
+
+裝完重開 Claude Code。
 
 ### 驗證
 
 ```
-/context
+/agents
 ```
 
-在 **Custom Agents** 區塊應該看得到五個 agent。或直接 @-mention 試試:
+應該看得到五個 agent(`worker`、`worker-hard`、`bulk`、`librarian`、`harvester`)。或直接 @-mention 試試:
 
 ```
-@agent-smart-agent-route:worker
+@agent-worker
 ```
+
+hook 貼好片段後,可用 `/hooks` 確認。
 
 搜程式碼也想改用 Haiku 的話,加上 `--with-explore`(會把 `templates/Explore.md` 放到 `~/.claude/agents/`,已存在則不覆蓋):
 
@@ -56,13 +64,13 @@ bash install.sh --with-explore
 
 ### 如果 agent 沒出現
 
-改用備援模式,直接把 agent 定義放進使用者層級的 agents 目錄:
+先確認有重開 Claude Code,再檢查 `~/.claude/agents/` 底下有沒有那五個 `.md`。只想要 agent、不要 skill 與 hook 的話,可改用:
 
 ```bash
 bash install.sh --agents-only
 ```
 
-這條路更原始但更保險——`~/.claude/agents/` 是 Claude Code 讀取使用者 subagent 的標準位置。代價是失去 plugin 的命名空間與版本管理,agent 會以 `worker` 而不是 `smart-agent-route:worker` 出現。
+只複製 agent 定義(同樣記入清單)。代價是 hook(context 提醒、session 開始帶入記憶)與 skill(`/handoff`、`/research`)不會生效。
 
 ### 想自己維護、改了立即生效
 
@@ -143,6 +151,6 @@ claude update
 
 ## 更新
 
-重跑一次 `install.sh` 即可,它會覆蓋舊版本。Cowork 那邊則是重新點一次新的 `.plugin` 檔。
+重跑一次 `install.sh` 即可:清單內(之前裝的)項目會先刪再複製成新版,你自己的同名檔不會被動。Cowork 那邊則是重新點一次新的 `.plugin` 檔。
 
 **兩邊要記得都更新。** 版本不一致時行為會不一樣,而這種問題很難察覺——你會以為是 agent 不穩定,其實是兩台在跑不同版本。
