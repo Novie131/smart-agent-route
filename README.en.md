@@ -2,13 +2,28 @@
 
 <p align="center"><a href="README.md"><b>繁體中文</b></a> · <b>English</b></p>
 
-A Claude Code plugin for tiered model delegation: **the main conversation thinks with Opus, Sonnet executes, and Haiku handles retrieval and bulk reading.** It reminds you when the context window gets long and writes handoff notes, so you can clear the conversation without worry. Knowledge accumulates across conversations, and external information is cited with its source.
+**Make Claude Code work like a small team: Opus is the lead who thinks, Sonnet and Haiku do the hands-on work. When the conversation gets long, it writes a handoff note first, then picks up from the note after the conversation is cleared.**
 
 The Traditional Chinese docs are the primary version; this English version is a translation and may lag behind.
 
 ---
 
-## Install
+## What problem this solves
+
+After using Claude Code for a while, two things tend to happen:
+
+- **It gets expensive**: the main conversation's Opus does everything itself, including reading long logs, looking through piles of screenshots, and editing dozens of files. Most of that work is fine on a cheaper model.
+- **Conversations keep growing**: every message and every file read is sent to the model again on every later turn. Late in a long conversation, most of what you pay for is re-reading old content. Measured on one heavy user across 21 sessions, the median context per main-conversation call was about 240k tokens.
+
+This plugin works like a lead running a team: the lead (Opus) listens, thinks it through, and decides who gets the work; the hands-on work goes to team members (Sonnet, Haiku), who finish it at their own desks and hand back only the conclusion, so the lead's desk stays clean. When the desk is nearly full, the lead writes a handoff note, clears the desk, and continues from the note.
+
+**Good fit**: you already use Claude Code for multi-step work (changing code, reading logs, looking things up) and want to save money or keep long conversations under control. If you only ask the occasional one-off question, the benefit of delegation is small.
+
+---
+
+## Quick start
+
+Inside Claude Code, run:
 
 ```
 /plugin install smart-agent-route --marketplace Novie131/smart-agent-route
@@ -17,21 +32,189 @@ The Traditional Chinese docs are the primary version; this English version is a 
 
 (Claude Code 2.1.275 and earlier: first run `/plugin marketplace add Novie131/smart-agent-route`, then `/plugin install smart-agent-route@smart-agent-route`.)
 
-It works right after install, with no further setup. For the full feature set (context status line, auto-compact threshold, Haiku-based Explore, a claude-memory store), run this inside Claude Code:
+It works right after install. Two things are recommended next:
+
+1. **Set the main conversation to Opus**: `/model opus`. The plugin never changes this automatically.
+2. **Turn on the full feature set**: run `/smart-agent-route:route-setup` to set up the context status line, the auto-compact threshold, the Haiku-based Explore, and a `claude-memory/` store. It asks one item at a time, explains what each does, its impact, and how to undo it, and you can skip any of them. It backs up `settings.json` before writing and never overwrites values that already exist. If you skip it, the session start hook reminds you (at most 3 times).
+
+The context-length reminder needs `python3`; without it, the reminder hook quietly disables itself. To install without the marketplace, see [Other ways to install](#other-ways-to-install).
+
+---
+
+## Using it
+
+Just talk normally; the main conversation decides whether to delegate:
+
+| You say | Who handles it |
+|---|---|
+| "Help me think through how to do this" | The main conversation (Opus) thinks it through itself |
+| "Do what we just discussed" | worker (Sonnet) does it, verifying before reporting back |
+| "Check these 18 screenshots for layout breakage", "Why did this log fail" | bulk (Haiku) reads it all and returns only the conclusion |
+| "Did I note anything about X before?" | librarian (Haiku) searches memory and cites where it found things |
+| "How do I configure the new version of this API" | The research skill looks it up and cites sources; official material is saved to `claude-memory/web/` |
+| "Hand off" | The handoff skill writes `handoff.md`, after which you can `/clear` |
+
+To force a specific agent, use `@agent-smart-agent-route:worker`.
+
+When the conversation gets long (past 100k tokens by default) you get a reminder, and Claude first writes the current progress into `handoff.md`. After that, whether it is an auto-compact, a `/clear`, or a new conversation the next day, the handoff note comes back automatically, so you do not have to explain everything again.
+
+### Glossary
+
+- **context**: everything the model sees on this turn, including the system prompt, conversation history, and tool results. Measured in tokens; the longer it is, the more it costs.
+- **subagent**: a helper the main conversation sends out. It works in its own separate context and hands back only the conclusion.
+- **skill**: a fixed procedure you can invoke, such as `handoff` for writing a handoff note.
+- **hook**: a script Claude Code runs automatically at certain moments, such as when a session starts or when you send a message.
+- **effort**: how hard the model thinks. Higher means longer thinking and higher cost.
+- **auto-compact**: when the context is nearly full, Claude Code condenses the old conversation into a summary.
+- **Cowork**: the agentic work mode in the Claude desktop app.
+
+---
+
+## How it works
 
 ```
-/smart-agent-route:route-setup
+You ──► main conversation (Opus)  ← the front door: understands, decides who gets the work
+          │
+          ├──► worker (Sonnet)       ← direction is settled, just do it
+          │      └► worker-hard       ← escalation after worker fails
+          ├──► bulk (Haiku)          ← lots to read, only conclusions needed: images, long logs, web pages
+          ├──► librarian (Haiku)     ← searches the knowledge base. Read-only
+          └──► harvester (Sonnet)    ← mines past conversations into the knowledge base. Manual trigger
+
+skill: handoff (handoff notes), research (look up external info with sources), usage-stats (measure context and subagent usage), route-setup (one-time full setup)
+hook : session start injects the delegation guide and memory; a reminder fires when the context gets long
 ```
 
-It explains each item one at a time (what it does, its impact, how to undo it), asks one question per item, and you can skip any of them. It backs up `settings.json` before writing and never overwrites values that already exist. If you have not run route-setup, the session start hook reminds you (at most 3 times). Setting the main conversation model to Opus (`/model opus`) is recommended; this is never changed automatically.
+| Component | Model | What it does |
+|---|---|---|
+| worker | Sonnet, effort medium | Work whose direction is already decided: writing code, fixing bugs, adding tests. It must verify before reporting done |
+| worker-hard | Sonnet, effort high | Only used after worker fails; the delegation must include the previous failure report |
+| bulk | Haiku | Reads large amounts of material and returns only conclusions: many images, long logs, web pages, commands with huge output, and mechanical batch edits |
+| librarian | Haiku, effort low | Searches the knowledge base and memory. It has only `Read`, `Glob`, and `Grep`, so it cannot modify anything; it returns verbatim excerpts with their sources, plus which terms it searched and what it did not find |
+| harvester | Sonnet | Mines past conversation transcripts into knowledge-base notes. Only runs when you explicitly ask; it is costly |
+| Explore (optional) | Haiku | The built-in Explore runs on Opus when the main conversation is Opus. A plugin cannot override it (only a user- or project-level agent named `Explore` can), so route-setup or `bash install.sh --with-explore` installs a Haiku version into `~/.claude/agents/` |
 
-Without a `claude-memory/` folder, memory falls back to Claude Code's own auto memory, which works fine. `claude-memory/` is an advanced option (it can go into git and be shared across environments).
+- **Skills**: `handoff` writes `handoff.md`; `research` looks up external information and cites sources; `usage-stats` measures main-conversation context length and the share of work done by subagents (read-only); `route-setup` is the one-time full setup.
+- **Hooks**: SessionStart injects the delegation guide, the memory index, and the handoff note; UserPromptSubmit reminds you when the context window is too long.
 
-The context-length reminder needs `python3`; without it, the reminder hook quietly disables itself.
+How the main conversation delegates does not depend on your CLAUDE.md: the SessionStart hook injects the delegation table at the start of every session (see `hooks/guide.md`). Design rationale and trade-offs are in [docs/spec.md](docs/spec.md) (Traditional Chinese).
+
+### Why this saves money
+
+**Routing happens after Opus, not before.** Judging intent requires reading the message, and reading it is already planning, so a cheap router in front is not possible. Opus is always the entry point and does the delegating.
+
+The savings come from four places, in order of impact:
+
+1. **Context isolation** (the biggest, and it compounds). Running 30 tool calls in the main conversation means paying for those 30 results until the conversation ends; in a subagent, the main conversation receives only a summary. Delegate whole chunks of work, not single steps, because each subagent launch pays the system prompt and memory injection again.
+2. **Model tiering.** Useful but linear: the saving is roughly the price difference.
+3. **`effort` levels.** worker uses `medium`, escalating to worker-hard (`high`) only on failure; librarian uses `low`.
+4. **Do not keep the main conversation open too long.** Isolation only covers tool calls, not the conversation itself growing longer, so the plugin also watches length and reminds you to write a handoff note past a threshold (see [Advanced settings](#advanced-settings)). Starting a new conversation or `/clear` when a topic ends is still the cheapest.
+
+### When things fail
+
+Subagents finish with a fixed report format so the main conversation can decide the next step from the first two lines: a status line (done, failed, or needs a decision) and a verification line (passed, not verified, or failed). Done is only allowed together with verification passed. If a subagent hits a fork that requires a decision, it stops and reports the options and their consequences instead of picking one itself.
+
+Failure escalation order: re-delegate to the same agent with added background, then bulk failure falls back to worker, worker failure goes to worker-hard (with the previous failure report), and if that still fails it stops to re-plan or ask you. It never escalates endlessly.
+
+---
+
+## Advanced settings
+
+### Context reminders and auto-compact
+
+- The UserPromptSubmit hook reminds you once when the context passes 100k tokens, then every additional 40k. Adjust the threshold with the environment variable `CONTEXT_REMIND_TOKENS`.
+- On reminder, Claude writes the current state into `handoff.md` with the handoff skill (current task / done / next steps / open questions).
+- If `autoCompactWindow` is set, the reminder just tells you auto-compact will happen at about N k and the handoff will be restored; otherwise it gives you a copyable command: `/clear` at a stopping point, `/compact` with a focus mid-task, or `/rewind` with a partial summary if the later part is debugging noise.
+- The SessionStart hook injects `handoff.md` after every compact, `/clear` and startup: from `claude-memory/` if the project has it, otherwise from the auto memory directory next to the transcript (Claude Code only injects the MEMORY.md index of auto memory, never handoff.md).
+
+Recommended: set auto-compact as a safety net in `~/.claude/settings.json` (a plugin cannot set it for you; `/smart-agent-route:route-setup` writes it safely):
+
+```
+"autoCompactWindow": 153000
+```
+
+After subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, leaving about 20k of headroom after the 100k reminder to write the handoff. The 33k figure was measured on the author's machine (it is not known to be fixed); after writing the value, confirm with `/context` that the Autocompact buffer is about 33k and the compact point about 120k (and also check any per-model overrides in `modelSettings`).
+
+### Status line (optional)
+
+Shows `model │ ctx 95k │ reminder 100k │ compact 120k`, with the compact point read from `autoCompactWindow` (not shown if unset). A plugin cannot configure the main status line: plugin users should use `/smart-agent-route:route-setup`, which places the file in a fixed location; install.sh users can run `bash install.sh --with-statusline` or paste this into settings.json by hand:
+
+```json
+"statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }
+```
+
+### Checking the fixed cost
+
+To see what every turn pays up front (system prompt, tool definitions, MCP, skills, memory files), type `/context` in a conversation, or run `claude -p "/context"` in a terminal (no interactive session needed; it is computed locally and does not call the model). On the author's machine a fresh conversation starts at about 29k tokens, about 18k of which is Claude Code's own system prompt and tool definitions; tools marked deferred are loaded only when used and are not counted. Fixed content hits the prompt cache every turn, so it is rarely the main cost: deal with conversation length and output first, and only then consider removing unused MCP servers or plugins.
+
+---
+
+## Memory
+
+```
+<your folder>/claude-memory/
+├── MEMORY.md    ← resident index, injected by the hook at session start, 40-line budget
+├── handoff.md   ← handoff note, injected automatically into the next session
+├── topics/      ← knowledge accumulated by agents
+├── kb/          ← your own notes
+└── web/         ← external-info notes saved by research (with source and expiry date)
+```
+
+Without a `claude-memory/` folder, memory falls back to Claude Code's own auto memory, which works fine. `claude-memory/` is an advanced option; its advantage is that it can go into git and be shared across environments.
+
+`MEMORY.md` **holds only trigger conditions; the knowledge itself lives in topic files.** This makes cost proportional to how much you use this time, not to how much is remembered in total: knowledge can grow without limit while the fixed startup cost stays constant. Write the index as conditions, not topics:
+
+- Bad: `setup.md — about environment setup` (a topic)
+- Good: `setup.md — read first when you need to change paths or a command will not run` (a condition)
+
+Where memory lives:
+
+- Agents prefer the `claude-memory/` folder inside a connected (working) folder, and fall back to their own agent memory directory (`~/.claude/agent-memory/worker/`) when it is missing.
+- In Claude Code (terminal) the fallback persists across conversations. In Cowork the sandbox home directory is rebuilt every session, so only the connected folder survives: connect it again in each new conversation.
+- If you disabled `autoMemoryEnabled` or set `CLAUDE_CODE_DISABLE_AUTO_MEMORY`, the `memory` field has no effect, and connecting a folder becomes required rather than optional.
+- The folder opens directly as an Obsidian vault with no integration needed, since a vault is just a pile of `.md` files. Use a new, dedicated vault rather than your existing personal notes, because agents have write access.
+- Memory should record "how to do it next time", not "what was done this time". A running log does not make the next run faster.
+
+Keeping `MEMORY.md` thin matters: it is truncated beyond its limit (the hook injects up to 120 lines; auto memory 200), and resident content is a fixed cost paid in every session. It decays over time, so tidy it periodically; more than 150 lines is the warning sign.
+
+### Knowledge base and harvester
+
+You can feed the knowledge base in two ways: drop `.md` files into `kb/` yourself (no preprocessing, librarian finds them immediately), or ask `harvester` to mine past conversations (it lists the available sessions and lets you choose the scope first). Four limits to know:
+
+- It only sees local sessions; conversations on the web or mobile are out of scope.
+- It is costly, so treat it as an occasional batch job, not an always-on feature.
+- Extraction is always lossy: spot-check the output, especially the first few runs.
+- It writes into `kb/`, which is otherwise yours. If you care about that boundary, have it write to `kb/harvested/` first.
+
+Run it once after first install to seed the knowledge base; after that worker records memory as it goes, so it is rarely needed again.
+
+---
+
+## Design trade-offs
+
+### This is RAG, just without vectors
+
+`librarian` retrieves using keyword search and conditional judgment. At personal scale (dozens to hundreds of notes) this is usually better than vectors: no extra infrastructure, retrieval failures are explainable, and chunking does not break Markdown structure. It also swaps synonyms, switches languages, and retries by searching file names, which a fixed vector query cannot do.
+
+Vectors are worth considering only for thousands of notes, large numbers of PDFs, or long transcripts. At that point the markdown in `kb/` can serve directly as the corpus.
+
+### When to add a Haiku execution layer
+
+`skills/route-setup/templates/runner.md.example` is a reserved slot that is **deliberately not loaded**. The Haiku layer is the only layer that really saves money and the only one that is really risky: it does not stop to ask, it quietly does what it thinks you meant. So each Haiku agent must be bound to one concrete task.
+
+Enable one only when all three hold:
+
+- You have done the task three to five times with nearly the same steps.
+- Success is obvious at a glance.
+- Mistakes are affordable and reversible (nothing deleted, sent out, or overwritten without a backup).
+
+Otherwise leave it with worker. Retrieval (librarian) is the exception, because it is read-only.
+
+---
+
+## Other ways to install
 
 If you prefer not to use the marketplace, the repo ships `install.sh`, or you can run `claude --plugin-dir ./plugins/smart-agent-route` directly.
-
-### Install with install.sh
 
 ```
 bash install.sh                    # copy install (agents, skills, hooks go into ~/.claude/, no namespace prefix; re-run to update)
@@ -50,138 +233,6 @@ Notes:
 - install.sh does not edit your `settings.json` hooks. It prints a snippet at the end that you merge into `"hooks"` yourself. After that, run `/route-setup` for the full feature set.
 
 For more detail, see the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md) (Traditional Chinese only) and [plugins/smart-agent-route/INSTALL.en.md](plugins/smart-agent-route/INSTALL.en.md).
-
----
-
-## Architecture
-
-```
-You ──► main conversation (Opus)  ← the front door: understands, decides who gets the work
-          │
-          ├──► worker (Sonnet)       ← direction is settled, just do it
-          │      └► worker-hard       ← escalation after worker fails
-          ├──► bulk (Haiku)          ← lots to read, only conclusions needed: images, long logs, web pages
-          ├──► librarian (Haiku)     ← searches the knowledge base. Read-only
-          └──► harvester (Sonnet)    ← mines past conversations into the knowledge base. Manual trigger
-
-skill: handoff (handoff notes), research (look up external info with sources), usage-stats (measure context and subagent usage), route-setup (one-time full setup)
-hook : session start injects the delegation guide and memory; a reminder fires when the context gets long
-```
-
-What each component is for:
-
-- **worker** (Sonnet, `effort: medium`): does work whose direction is already decided, such as writing code, fixing bugs, adding tests. It must verify before reporting done.
-- **worker-hard** (Sonnet, `effort: high`): only used after worker fails, and the delegation must include the previous failure report.
-- **bulk** (Haiku): reads large amounts of material and returns only conclusions: many images, long logs, web pages, commands with huge output, and mechanical batch edits.
-- **librarian** (Haiku, `effort: low`): searches the knowledge base and memory. It has only `Read`, `Glob`, and `Grep`, so it cannot modify anything, and it returns verbatim excerpts with their sources, plus which terms it searched and what it did not find.
-- **harvester** (Sonnet): mines past conversation transcripts into knowledge-base notes. Only runs when you explicitly ask; it is a costly batch job.
-- **Explore** (Haiku, optional): the built-in Explore runs on Opus when the main conversation is Opus. A plugin cannot override it (only a user- or project-level agent named `Explore` can), so route-setup or `bash install.sh --with-explore` installs a Haiku version into `~/.claude/agents/`.
-- **Skills**: `handoff` writes `handoff.md`; `research` looks up external information and cites sources; `usage-stats` measures main-conversation context length and the share of work done by subagents (read-only); `route-setup` is the one-time full setup.
-- **Hooks**: SessionStart injects the delegation guide, the memory index, and the handoff note; UserPromptSubmit reminds you when the context window is too long.
-
-**Routing happens after Opus, not before.** Judging intent requires reading the message, and reading it is already planning, so a cheap router in front is not possible. Opus is always the entry point and does the delegating.
-
-The cost still works out: planning is one message, while an execution loop is often dozens of tool calls. The biggest saving, though, is **context isolation**. Every message in a conversation is resent on every later turn; keeping tool calls inside a subagent's separate context window means the main conversation receives only a summary.
-
-**But isolation only covers tool calls, not the conversation itself growing longer.** Measured on one heavy user across 21 sessions, the median context per main-conversation call was about 240k tokens, mostly re-reading old conversation. So the plugin also watches length: it reminds you past 100k tokens, Claude writes the current state with the handoff skill, auto-compact triggers at about 120k, and the handoff is injected back automatically afterwards, so no manual `/clear` is needed.
-
-Design rationale and trade-offs are in [docs/spec.md](docs/spec.md) (Traditional Chinese).
-
-### Delegation and failure escalation
-
-Just talk normally; the main conversation decides whether to delegate. For example: deciding how to approach something stays on Opus; "do what we just discussed" goes to worker; "did I note anything about X before?" goes to librarian; "check these 18 screenshots for layout breakage" or "why did this log fail" goes to bulk; "how do I configure the new version of this API" uses the research skill; "hand off" or a context-length reminder triggers the handoff skill, after which you can `/clear`. To force a specific subagent, use `@agent-smart-agent-route:worker`.
-
-Failure escalation order: re-delegate to the same agent with added background, then bulk failure falls back to worker, worker failure goes to worker-hard (with the previous failure report), and if that still fails it stops to re-plan or ask you. It never escalates endlessly.
-
-### Subagent report format
-
-Subagents finish with a fixed report format so the main conversation can decide the next step from the first two lines: a status line (done, failed, or needs a decision) and a verification line (passed, not verified, or failed). Done is only allowed together with verification passed. If a subagent hits a fork that requires a decision, it stops and reports the options and their consequences instead of picking one itself.
-
----
-
-## Memory
-
-```
-<your folder>/claude-memory/
-├── MEMORY.md    ← resident index, injected by the hook at session start, 40-line budget
-├── handoff.md   ← handoff note, injected automatically into the next session
-├── topics/      ← knowledge accumulated by agents
-├── kb/          ← your own notes
-└── web/         ← external-info notes saved by research (with source and expiry date)
-```
-
-`MEMORY.md` **holds only trigger conditions; the knowledge itself lives in topic files.** This makes cost proportional to how much you use this time, not to how much is remembered in total: knowledge can grow without limit while the fixed startup cost stays constant.
-
-Write the index as conditions, not topics:
-
-- Bad: `setup.md — about environment setup` (a topic)
-- Good: `setup.md — read first when you need to change paths or a command will not run` (a condition)
-
-Where memory lives:
-
-- Agents prefer the `claude-memory/` folder inside a connected (working) folder, and fall back to their own agent memory directory (`~/.claude/agent-memory/worker/`) when it is missing.
-- In Claude Code (terminal) the fallback persists across conversations. In Cowork (desktop) the sandbox home directory is rebuilt every session, so only the connected folder survives: connect it again in each new conversation.
-- Without `claude-memory/`, memory falls back to Claude Code's auto memory. If you disabled `autoMemoryEnabled` or set `CLAUDE_CODE_DISABLE_AUTO_MEMORY`, the `memory` field has no effect, and connecting a folder becomes required rather than optional.
-- The folder opens directly as an Obsidian vault with no integration needed, since a vault is just a pile of `.md` files. Use a new, dedicated vault rather than your existing personal notes, because agents have write access.
-- Memory should record "how to do it next time", not "what was done this time". A running log does not make the next run faster.
-
-Keeping `MEMORY.md` thin matters: it is truncated beyond its limit (the hook injects up to 120 lines; auto memory 200), and resident content is a fixed cost paid in every session. It decays over time, so tidy it periodically; more than 150 lines is the warning sign.
-
----
-
-## This is RAG, just without vectors
-
-`librarian` retrieves using keyword search and conditional judgment. At personal scale (dozens to hundreds of notes) this is usually better than vectors: no extra infrastructure, retrieval failures are explainable, and chunking does not break Markdown structure. It also swaps synonyms, switches languages, and retries by searching file names, which a fixed vector query cannot do.
-
-Vectors are worth considering only for thousands of notes, large numbers of PDFs, or long transcripts. At that point the markdown in `kb/` can serve directly as the corpus.
-
----
-
-## Saving tokens and the context window
-
-Four levers, in order of impact:
-
-1. **Context isolation** (the biggest, and it compounds). Every message and tool result is resent on each later turn. Running 30 tool calls in the main conversation means paying for those 30 results until the conversation ends; in a subagent, the main conversation receives only a summary. Delegate whole chunks of work, not single steps, because each subagent launch pays the system prompt and memory injection again.
-2. **Model tiering.** Useful but linear: the saving is roughly the price difference.
-3. **`effort` levels.** worker uses `medium`, escalating to worker-hard (`high`) only on failure; librarian uses `low`.
-4. **Do not keep the main conversation open too long.** An Opus conversation that keeps growing is the quietest leak. The UserPromptSubmit hook reminds you once when the context passes 100k tokens, then every additional 40k (adjust the threshold with the environment variable `CONTEXT_REMIND_TOKENS`). On reminder, Claude writes the current state into `handoff.md` with the handoff skill (current task / done / next steps / open questions). If `autoCompactWindow` is set (below), it then just tells you auto-compact will happen at about N k and the handoff will be restored; otherwise it gives you a copyable command: `/clear` at a stopping point, `/compact` with a focus mid-task, or `/rewind` with a partial summary if the later part is debugging noise. The SessionStart hook injects `handoff.md` after every compact, `/clear` and startup: from `claude-memory/` if the project has it, otherwise from the auto memory directory next to the transcript (Claude Code only injects the MEMORY.md index of auto memory, never handoff.md). Starting a new conversation or `/clear` when a topic ends is still cheaper.
-
-Recommended: set auto-compact as a safety net in `~/.claude/settings.json` (a plugin cannot set it for you; `/smart-agent-route:route-setup` writes it safely):
-
-```
-"autoCompactWindow": 153000
-```
-
-After subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, leaving about 20k of headroom after the 100k reminder to write the handoff. The 33k figure was measured on the author's machine (it is not known to be fixed); after writing the value, confirm with `/context` that the Autocompact buffer is about 33k and the compact point about 120k (and also check any per-model overrides in `modelSettings`).
-
-**Status line** (optional): shows `model │ ctx 95k │ reminder 100k │ compact 120k`, with the compact point read from `autoCompactWindow` (not shown if unset). A plugin cannot configure the main status line, so use `bash install.sh --with-statusline`, or paste this into settings.json by hand (this path applies only to install.sh installs; plugin users should use `/smart-agent-route:route-setup`, which places the file in a fixed location):
-
-```json
-"statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }
-```
-
-The reminder text also includes the estimated compact point.
-
-**Checking the fixed cost**: to see what every turn pays up front (system prompt, tool definitions, MCP, skills, memory files), type `/context` in a conversation, or run `claude -p "/context"` in a terminal (no interactive session needed; it is computed locally and does not call the model). On the author's machine a fresh conversation starts at about 29k tokens, about 18k of which is Claude Code's own system prompt and tool definitions; tools marked deferred are loaded only when used and are not counted. Fixed content hits the prompt cache every turn, so it is rarely the main cost: deal with conversation length and output first, and only then consider removing unused MCP servers or plugins.
-
----
-
-## Extending: when to add a Haiku layer
-
-`skills/route-setup/templates/runner.md.example` is a reserved slot that is **deliberately not loaded**. The Haiku layer is the only layer that really saves money and the only one that is really risky: it does not stop to ask, it quietly does what it thinks you meant. So each Haiku agent must be bound to one concrete task. Enable one only when all three hold: you have done the task three to five times with nearly the same steps; success is obvious at a glance; and mistakes are affordable and reversible (nothing deleted, sent out, or overwritten without a backup). Otherwise leave it with worker. Retrieval (librarian) is the exception, because it is read-only.
-
----
-
-## Knowledge base and harvester
-
-You can feed the knowledge base in two ways: drop `.md` files into `kb/` yourself (no preprocessing, librarian finds them immediately), or ask `harvester` to mine past conversations (it lists the available sessions and lets you choose the scope first). Four limits to know:
-
-- It only sees local sessions; conversations on the web or mobile are out of scope.
-- It is costly, so treat it as an occasional batch job, not an always-on feature.
-- Extraction is always lossy: spot-check the output, especially the first few runs.
-- It writes into `kb/`, which is otherwise yours. If you care about that boundary, have it write to `kb/harvested/` first.
-
-Run it once after first install to seed the knowledge base; after that worker records memory as it goes, so it is rarely needed again.
 
 ---
 
