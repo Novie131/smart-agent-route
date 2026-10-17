@@ -1,0 +1,26 @@
+{
+  "name": "agent-board",
+  "version": "0.1.0",
+  "description": "在 Claude Code 聊天面板即時顯示子 agent 狀態的看板（試作版）。",
+  "author": { "name": "Novie131" },
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "自動開啟面板",
+      "description": "子 agent 啟動時自動開啟看板面板（不搶鍵盤焦點）。",
+      "default": true
+    },
+    "persistent": {
+      "type": "boolean",
+      "title": "面板常駐",
+      "description": "session 開始就開啟看板，回合開始時不自動收起（仍可縮小或用 /agent-board 關閉）。",
+      "default": true
+    },
+    "detailButton": {
+      "type": "boolean",
+      "title": "詳細說明按鈕",
+      "description": "看板底部加「▸ 詳細說明」按鈕，按下後要求把上一則回覆改寫成詳細版。",
+      "default": true
+    }
+  }
+}

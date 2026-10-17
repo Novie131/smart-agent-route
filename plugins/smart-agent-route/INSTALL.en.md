@@ -54,6 +54,20 @@ Add `--with-statusline` (it can be combined with the default copy mode or `--lin
 
 We also recommend `"autoCompactWindow": 153000` (the script does not write it): after subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, leaving about 20k of headroom after the 100k reminder to write the handoff; the handoff is injected back automatically after compaction. The 33k figure was measured on the author's machine; after writing the value, confirm with `/context` that the compact point is about 120k.
 
+### Board mod (optional)
+
+Add `--with-agent-board` (it can be combined with the default copy mode or `--link`, but not with `--agents-only` or `--uninstall`). VS Code cannot take `--plugin-dir`, so this mod (`plugins/agent-board`) is loaded through the `CLAUDE_CODE_PLUGIN_DIRS` environment variable; the script adds its directory to `env.CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` (multiple paths are separated by `:`). It only touches that one variable: it creates `env` if missing, appends to an existing value, and does not add the path twice; it first backs the file up as `settings.json.bak-<timestamp>`; if the JSON is broken or python3 is missing, it changes nothing and prints the snippet to add by hand. With `--link` the path points at `plugins/agent-board` inside the repo; in copy mode it first copies the folder to `~/.claude/smart-agent-route/agent-board/` (recorded in the install manifest) and points there; installs from a `.plugin` archive do not include agent-board, so it is skipped. `--uninstall` removes the path this script added from the variable (other paths and variables are left alone).
+
+After installing, run Developer: Reload Window in VS Code, or restart `claude` in the terminal, for it to load. Users who install from the plugin marketplace do not need this flag; use `/plugin install agent-board@smart-agent-route` instead. To do it by hand, add this to `settings.json`:
+
+```json
+"env": { "CLAUDE_CODE_PLUGIN_DIRS": "/absolute/path/to/plugins/agent-board" }
+```
+
+### Detail button and reply format (optional)
+
+Add `--with-reply-detail` (the restrictions, `--link`/copy modes and `--uninstall` handling are all the same as `--with-agent-board`, and the two flags can be used together). This mod (`plugins/reply-detail`) draws a "▸ 詳細說明" (detail) button under the last assistant reply; pressing it asks for the previous reply to be rewritten in a detailed version. It also injects a reply-format rule into the system prompt (a compact three-part reply: status / what you need to do / what you need to decide or provide; main conversation only, sub-agents ignore it). It is loaded the same way, through `env.CLAUDE_CODE_PLUGIN_DIRS`: with `--link` the path points at `plugins/reply-detail` inside the repo; in copy mode it first copies the folder to `~/.claude/smart-agent-route/reply-detail/` (recorded in the install manifest) and points there; installs from a `.plugin` archive do not include it, so it is skipped. `--uninstall` removes only the path this script added. After installing, run Developer: Reload Window in VS Code, or restart `claude` in the terminal. Users who install from the plugin marketplace should use `/plugin install reply-detail@smart-agent-route` instead.
+
 ### Verify
 
 ```

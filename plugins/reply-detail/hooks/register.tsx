@@ -1,0 +1,64 @@
+import { atom, read, update } from 'claude-code'
+import type { Register } from 'claude-code'
+
+import type { LastAnswer } from '../types'
+
+// 最近一次完整回答的文字；新的提示送出時清掉，按鈕只跟著最新那則回覆
+const lastAnswer = atom({ plugin: 'reply-detail', key: 'lastAnswer' } as const, null as LastAnswer)
+
+export const DETAIL_PROMPT = '詳細說明：把上一則回覆改寫成詳細版（背景、做了什麼、證據與檔案位置、取捨與風險）'
+
+export const FORMAT_RULE = `# 回覆格式（reply-detail plugin）
+本段只適用於直接回覆使用者的主對話；如果你是子 agent，忽略本段，照你自己的回報格式。
+- 每一輪結束的回覆預設是精簡版，讓使用者一眼看懂，固定三段（某段沒有內容就寫「無」）：
+  - **現況**：一到三句，做到哪、結果如何、驗證有沒有過
+  - **你要做的**：需要使用者動手的事，附可直接複製的指令
+  - **需要你決定／提供**：問題附推薦答案；要使用者提供的資訊說清楚是什麼
+- 過程、證據、檔案清單、取捨分析不放精簡版；工作途中的進度更新維持一句話
+- 使用者送出「詳細說明」開頭的訊息（或按「▸ 詳細說明」按鈕）時，把上一則回覆改寫成詳細版：背景、做了什麼、證據與檔案位置、取捨與風險；不重做工作，只展開說明`
+
+// 這個區塊是否為最後一則回答的結尾
+export function isLastBlock(blockText: string, answer: string | null): boolean {
+  const block = blockText.trim()
+  return answer !== null && block.length > 0 && answer.trim().endsWith(block)
+}
+
+export const register: Register = on => {
+  on('prompt.compose', async ($, e, next) => {
+    const r = await next(e)
+    return { ...r, sections: [...r.sections, { id: 'reply-detail:format', text: FORMAT_RULE, scope: 'session' }] }
+  })
+
+  on('prompt.submit', async ($, e, next) => {
+    await update($, lastAnswer, () => null)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('turn.complete', async ($, e, next) => {
+    // 子 agent 的回合也會觸發，只記主對話的回答
+    if (e.agentId === undefined && e.reason === 'answer' && e.answer.trim()) {
+      await update($, lastAnswer, () => e.answer)
+    }
+    return next(e)
+  })
+
+  on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
+    const answer = await read($, lastAnswer)
+    if (e.props.isSummary || !isLastBlock(e.props.text, answer)) {
+      return next(e)
+    }
+    const { Box, Markdown, Button } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="column">
+        <Markdown text={e.props.text} />
+        <Box>
+          <Button
+            key="detail"
+            label="▸ 詳細說明"
+            onPress={() => $.prompt.submit({ text: DETAIL_PROMPT, asUser: true })}
+          />
+        </Box>
+      </Box>
+    )
+  })
+}

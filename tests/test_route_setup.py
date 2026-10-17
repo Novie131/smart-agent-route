@@ -86,6 +86,99 @@ class ApplySettingsTest(unittest.TestCase):
                 self.assertEqual(self.path.read_text(), bad)
                 self.assertEqual(self.baks(), [])
 
+    # --add-plugin-dir / --remove-plugin-dir
+    VAR = "CLAUDE_CODE_PLUGIN_DIRS"
+
+    def read(self):
+        return json.loads(self.path.read_text(encoding="utf-8"))
+
+    def test_add_plugin_dir_no_env(self):
+        orig = {"permissions": {"allow": ["Bash(ls)"]}, "model": "opus"}
+        text = json.dumps(orig)
+        self.path.write_text(text)
+        r = self.run_apply("--add-plugin-dir", "/a/board")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.read(), {**orig, "env": {self.VAR: "/a/board"}})
+        baks = self.baks()
+        self.assertEqual(len(baks), 1)
+        self.assertEqual(baks[0].read_text(), text)
+
+    def test_add_plugin_dir_creates_missing_file(self):
+        r = self.run_apply("--add-plugin-dir", "/a/board")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.read(), {"env": {self.VAR: "/a/board"}})
+        self.assertEqual(self.baks(), [])
+
+    def test_add_plugin_dir_keeps_other_env(self):
+        self.path.write_text(json.dumps({"env": {"FOO": "1"}, "x": 2}))
+        r = self.run_apply("--add-plugin-dir", "/a/board")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.read(), {"env": {"FOO": "1", self.VAR: "/a/board"}, "x": 2})
+
+    def test_add_plugin_dir_appends_to_existing(self):
+        self.path.write_text(json.dumps({"env": {self.VAR: "/x/one:/x/two", "FOO": "1"}}))
+        r = self.run_apply("--add-plugin-dir", "/a/board")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.read(), {"env": {self.VAR: "/x/one:/x/two:/a/board", "FOO": "1"}})
+
+    def test_add_plugin_dir_duplicate_not_added(self):
+        text = json.dumps({"env": {self.VAR: "/x/one:/a/board"}})
+        self.path.write_text(text)
+        r = self.run_apply("--add-plugin-dir", "/a/board")
+        self.assertEqual(r.returncode, 3)
+        self.assertIn("已存在", r.stdout)
+        self.assertEqual(self.path.read_text(), text)
+        self.assertEqual(self.baks(), [])
+
+    def test_remove_plugin_dir_only_one(self):
+        self.path.write_text(json.dumps({"env": {self.VAR: "/a/board"}, "x": 1}))
+        r = self.run_apply("--remove-plugin-dir", "/a/board")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.read(), {"x": 1})  # 變數空了刪變數，env 空了刪 env
+        self.assertEqual(len(self.baks()), 1)
+
+    def test_remove_plugin_dir_keeps_other_env_var(self):
+        self.path.write_text(json.dumps({"env": {self.VAR: "/a/board", "FOO": "1"}}))
+        self.run_apply("--remove-plugin-dir", "/a/board")
+        self.assertEqual(self.read(), {"env": {"FOO": "1"}})
+
+    def test_remove_plugin_dir_keeps_other_paths(self):
+        self.path.write_text(json.dumps({"env": {self.VAR: "/x/one:/a/board:/x/two"}}))
+        r = self.run_apply("--remove-plugin-dir", "/a/board")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.read(), {"env": {self.VAR: "/x/one:/x/two"}})
+
+    def test_remove_plugin_dir_absent_noop(self):
+        for text in ('{"x": 1}', json.dumps({"env": {self.VAR: "/x/one"}})):
+            with self.subTest(text=text):
+                self.path.write_text(text)
+                r = self.run_apply("--remove-plugin-dir", "/a/board")
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual(self.path.read_text(), text)
+                self.assertEqual(self.baks(), [])
+        self.path.unlink()
+        r = self.run_apply("--remove-plugin-dir", "/a/board")
+        self.assertEqual(r.returncode, 0)
+        self.assertFalse(self.path.exists())
+
+    def test_plugin_dir_bad_json_untouched(self):
+        for flag in ("--add-plugin-dir", "--remove-plugin-dir"):
+            for bad in ("{not json", "[1]"):
+                with self.subTest(flag=flag, bad=bad):
+                    self.path.write_text(bad)
+                    r = self.run_apply(flag, "/a/board")
+                    self.assertEqual(r.returncode, 2)
+                    self.assertEqual(self.path.read_text(), bad)
+                    self.assertEqual(self.baks(), [])
+
+    def test_plugin_dir_bad_env_type_untouched(self):
+        text = json.dumps({"env": ["x"]})
+        self.path.write_text(text)
+        r = self.run_apply("--add-plugin-dir", "/a/board")
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(self.path.read_text(), text)
+        self.assertEqual(self.baks(), [])
+
     def test_dry_run_writes_nothing(self):
         r = self.run_apply("--set-autocompact", "153000", "--dry-run")
         self.assertEqual(r.returncode, 0)

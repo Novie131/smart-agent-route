@@ -1,0 +1,7 @@
+{
+  "name": "reply-detail",
+  "version": "0.1.0",
+  "description": "在最後一則回覆下方加「▸ 詳細說明」按鈕，按下後要求改寫成詳細版；同時注入「精簡版三段式」回覆格式規則。",
+  "author": { "name": "Novie131" },
+  "types": "./types/index.d.ts"
+}

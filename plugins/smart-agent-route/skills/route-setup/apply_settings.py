@@ -3,6 +3,8 @@
 
 硬性規則：
 - 只碰 statusLine 與 autoCompactWindow 兩個鍵；絕不碰 permissions、hooks 或其他鍵。
+- 例外：--add-plugin-dir / --remove-plugin-dir 只動 env.CLAUDE_CODE_PLUGIN_DIRS（以 : 分隔的路徑清單），
+  env 裡的其他變數與其他鍵原樣保留；移除後變數或 env 變空就刪掉；要移除的路徑不存在則什麼都不做（不備份）。
 - 已有值就不覆蓋：印出現值，並以結束碼 3 回報「已存在」（沒有衝突的另一個鍵仍會寫入）。
 - JSON 解析失敗或最外層不是物件：不寫、不備份，結束碼 2。
 - 寫入前備份為 settings.json.bak-<YYYYmmdd-HHMMSS>；整份寫回用暫存檔 + os.replace。
@@ -19,6 +21,38 @@ import tempfile
 import time
 
 KEYS = ("statusLine", "autoCompactWindow")
+PLUGIN_DIRS_VAR = "CLAUDE_CODE_PLUGIN_DIRS"
+
+
+def _norm(p):
+    return p.rstrip("/") or p
+
+
+def plugin_dirs_edit(data, add=None, remove=None):
+    """就地修改 data["env"][CLAUDE_CODE_PLUGIN_DIRS]。回傳 (是否有改, 訊息, 結束碼)；結構不對拋 ValueError。"""
+    env = data.get("env")
+    if env is not None and not isinstance(env, dict):
+        raise ValueError("env 不是 JSON 物件")
+    cur = (env or {}).get(PLUGIN_DIRS_VAR)
+    if cur is not None and not isinstance(cur, str):
+        raise ValueError(f"{PLUGIN_DIRS_VAR} 不是字串")
+    parts = [x for x in (cur or "").split(":") if x]
+    if add is not None:
+        if any(_norm(x) == _norm(add) for x in parts):
+            return False, f"{PLUGIN_DIRS_VAR} 已存在 {add}，不重複加入", 3
+        parts.append(add)
+        data.setdefault("env", {})[PLUGIN_DIRS_VAR] = ":".join(parts)
+        return True, f"已加入 {PLUGIN_DIRS_VAR}：{add}", 0
+    kept = [x for x in parts if _norm(x) != _norm(remove)]
+    if len(kept) == len(parts):
+        return False, f"{PLUGIN_DIRS_VAR} 不含 {remove}，不修改", 0
+    if kept:
+        env[PLUGIN_DIRS_VAR] = ":".join(kept)
+    else:
+        del env[PLUGIN_DIRS_VAR]
+        if not env:
+            del data["env"]
+    return True, f"已從 {PLUGIN_DIRS_VAR} 移除：{remove}", 0
 
 
 def load(path):
@@ -84,6 +118,8 @@ def main(argv=None):
     ap.add_argument("--status", action="store_true", help="印出目前相關設定（JSON）")
     ap.add_argument("--set-statusline", metavar="CMD")
     ap.add_argument("--set-autocompact", metavar="N", type=int)
+    ap.add_argument("--add-plugin-dir", metavar="PATH", help="把 PATH 加進 env.CLAUDE_CODE_PLUGIN_DIRS")
+    ap.add_argument("--remove-plugin-dir", metavar="PATH", help="只從 env.CLAUDE_CODE_PLUGIN_DIRS 移除 PATH")
     ap.add_argument("--dry-run", action="store_true", help="只顯示會做什麼，不寫、不備份")
     args = ap.parse_args(argv)
     path = args.settings
@@ -103,7 +139,12 @@ def main(argv=None):
     if args.set_autocompact is not None:
         wanted["autoCompactWindow"] = args.set_autocompact
 
-    if not wanted:
+    pd_wanted = args.add_plugin_dir is not None or args.remove_plugin_dir is not None
+    if args.add_plugin_dir is not None and args.remove_plugin_dir is not None:
+        print("--add-plugin-dir 與 --remove-plugin-dir 不能同時使用", file=sys.stderr)
+        return 2
+
+    if not wanted and not pd_wanted:
         if not args.status:
             ap.print_usage(sys.stderr)
             return 2
@@ -118,10 +159,25 @@ def main(argv=None):
         else:
             to_write[key] = value
 
-    if to_write:
-        names = "、".join(to_write)
+    pd_changed = False
+    if pd_wanted:
+        try:
+            pd_changed, pd_msg, pd_code = plugin_dirs_edit(
+                data, add=args.add_plugin_dir, remove=args.remove_plugin_dir)
+        except ValueError as e:
+            print(f"settings 結構不符（{e}），不修改：{path}", file=sys.stderr)
+            return 2
+        print(pd_msg)
+        if pd_code:
+            exists_code = pd_code
+
+    if to_write or pd_changed:
+        names = "、".join(list(to_write) + (["env." + PLUGIN_DIRS_VAR] if pd_changed else []))
         if args.dry_run:
-            print(f"[dry-run] 會寫入 {names}：{json.dumps(to_write, ensure_ascii=False)}"
+            shown = dict(to_write)
+            if pd_changed:
+                shown["env." + PLUGIN_DIRS_VAR] = data["env"][PLUGIN_DIRS_VAR]
+            print(f"[dry-run] 會寫入 {names}：{json.dumps(shown, ensure_ascii=False)}"
                   f"{'' if existed else '（檔案不存在，會建立）'}")
         else:
             try:

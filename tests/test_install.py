@@ -242,5 +242,133 @@ class InstallTest(unittest.TestCase):
         self.assertFalse((self.claude / "settings.json").exists())
 
 
+    # agent-board
+    BOARD_SRC = ROOT / "plugins" / "agent-board"
+    VAR = "CLAUDE_CODE_PLUGIN_DIRS"
+
+    def plugin_dirs(self):
+        data = json.loads((self.claude / "settings.json").read_text())
+        return data.get("env", {}).get(self.VAR)
+
+    def test_agent_board_link(self):
+        orig = {"permissions": {"allow": ["Bash(ls)"]}, "env": {"FOO": "1"}}
+        self.user_file("settings.json", json.dumps(orig))
+        self.run_install("--link", "--with-agent-board")
+        self.assertEqual(self.plugin_dirs(), str(self.BOARD_SRC))
+        data = json.loads((self.claude / "settings.json").read_text())
+        self.assertEqual(data["env"]["FOO"], "1")
+        self.assertEqual(data["permissions"], orig["permissions"])
+        self.assertEqual(len(self.baks()), 1)
+        self.run_install("--link", "--with-agent-board")  # 重跑不重複
+        self.assertEqual(self.plugin_dirs(), str(self.BOARD_SRC))
+        self.run_install("--uninstall")
+        data = json.loads((self.claude / "settings.json").read_text())
+        self.assertEqual(data, orig)
+
+    def test_agent_board_copy(self):
+        self.run_install("--with-agent-board")
+        dest = self.claude / "smart-agent-route" / "agent-board"
+        self.assertTrue(dest.is_dir())
+        self.assertFalse(dest.is_symlink())
+        self.assertIn("smart-agent-route/agent-board", self.manifest_lines())
+        self.assertEqual(self.plugin_dirs(), str(dest))
+        self.run_install("--with-agent-board")
+        self.assertEqual(self.plugin_dirs(), str(dest))
+        self.run_install("--uninstall")
+        self.assertFalse(dest.exists())
+        data = json.loads((self.claude / "settings.json").read_text())
+        self.assertEqual(data, {})
+
+    def test_agent_board_uninstall_keeps_other_paths(self):
+        self.run_install("--with-agent-board")
+        dest = self.claude / "smart-agent-route" / "agent-board"
+        p = self.claude / "settings.json"
+        data = json.loads(p.read_text())
+        data["env"][self.VAR] = f"/x/other:{dest}"
+        p.write_text(json.dumps(data))
+        self.run_install("--uninstall")
+        self.assertEqual(self.plugin_dirs(), "/x/other")
+
+    def test_uninstall_without_board_leaves_settings_alone(self):
+        text = '{"env": {"CLAUDE_CODE_PLUGIN_DIRS": "/x/other"}}'
+        p = self.user_file("settings.json", text)
+        self.run_install("--uninstall")
+        self.assertEqual(p.read_text(), text)
+        self.assertEqual(self.baks(), [])
+
+    def test_agent_board_bad_json_untouched(self):
+        p = self.user_file("settings.json", "{not json")
+        r = self.run_install("--with-agent-board")
+        self.assertEqual(p.read_text(), "{not json")
+        self.assertEqual(self.baks(), [])
+        self.assertIn(self.VAR, r.stdout)
+
+    def test_agent_board_conflicts(self):
+        for flag in ("--agents-only", "--uninstall"):
+            with self.subTest(flag=flag):
+                self.run_install_fail("--with-agent-board", flag)
+        self.assertFalse((self.claude / "settings.json").exists())
+
+    # reply-detail
+    DETAIL_SRC = ROOT / "plugins" / "reply-detail"
+
+    def test_reply_detail_link(self):
+        orig = {"permissions": {"allow": ["Bash(ls)"]}, "env": {"FOO": "1"}}
+        self.user_file("settings.json", json.dumps(orig))
+        self.run_install("--link", "--with-reply-detail")
+        self.assertEqual(self.plugin_dirs(), str(self.DETAIL_SRC))
+        self.run_install("--link", "--with-reply-detail")  # 重跑不重複
+        self.assertEqual(self.plugin_dirs(), str(self.DETAIL_SRC))
+        self.run_install("--uninstall")
+        data = json.loads((self.claude / "settings.json").read_text())
+        self.assertEqual(data, orig)
+
+    def test_reply_detail_copy(self):
+        self.run_install("--with-reply-detail")
+        dest = self.claude / "smart-agent-route" / "reply-detail"
+        self.assertTrue(dest.is_dir())
+        self.assertFalse(dest.is_symlink())
+        self.assertIn("smart-agent-route/reply-detail", self.manifest_lines())
+        self.assertEqual(self.plugin_dirs(), str(dest))
+        self.run_install("--uninstall")
+        self.assertFalse(dest.exists())
+        data = json.loads((self.claude / "settings.json").read_text())
+        self.assertEqual(data, {})
+
+    def test_both_mods_link(self):
+        self.run_install("--link", "--with-agent-board", "--with-reply-detail")
+        self.assertEqual(self.plugin_dirs(), f"{self.BOARD_SRC}:{self.DETAIL_SRC}")
+        self.run_install("--uninstall")
+        data = json.loads((self.claude / "settings.json").read_text())
+        self.assertEqual(data, {})
+
+    def test_both_mods_copy(self):
+        self.run_install("--with-agent-board", "--with-reply-detail")
+        base = self.claude / "smart-agent-route"
+        self.assertEqual(self.plugin_dirs(), f"{base / 'agent-board'}:{base / 'reply-detail'}")
+        self.run_install("--uninstall")
+        self.assertFalse((base / "agent-board").exists())
+        self.assertFalse((base / "reply-detail").exists())
+        data = json.loads((self.claude / "settings.json").read_text())
+        self.assertEqual(data, {})
+
+    def test_reply_detail_uninstall_keeps_other_paths(self):
+        self.run_install("--with-agent-board", "--with-reply-detail")
+        dest = self.claude / "smart-agent-route" / "reply-detail"
+        board = self.claude / "smart-agent-route" / "agent-board"
+        p = self.claude / "settings.json"
+        data = json.loads(p.read_text())
+        data["env"][self.VAR] = f"/x/other:{board}:{dest}"
+        p.write_text(json.dumps(data))
+        self.run_install("--uninstall")
+        self.assertEqual(self.plugin_dirs(), "/x/other")
+
+    def test_reply_detail_conflicts(self):
+        for flag in ("--agents-only", "--uninstall"):
+            with self.subTest(flag=flag):
+                self.run_install_fail("--with-reply-detail", flag)
+        self.assertFalse((self.claude / "settings.json").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

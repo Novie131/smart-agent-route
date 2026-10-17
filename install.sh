@@ -10,6 +10,16 @@
 #                                   可與預設複製模式或 --link 併用;不能與 --agents-only、--uninstall 併用。
 #                                   只碰 statusLine 這一個鍵:沒有檔案就建立;已有 statusLine 不覆蓋,只印建議;
 #                                   其餘情況先備份成 settings.json.bak-<時間> 再寫入;JSON 壞掉或沒有 python3 則不修改。
+#   bash install.sh --with-agent-board  另外把 plugins/agent-board(看板 mod)的目錄加進 ~/.claude/settings.json 的
+#                                   env.CLAUDE_CODE_PLUGIN_DIRS(VS Code 不能帶 --plugin-dir,靠這個變數載入)
+#                                   可與預設複製模式或 --link 併用;不能與 --agents-only、--uninstall 併用。
+#                                   --link:路徑指向 repo 內的 plugins/agent-board;複製模式:先複製到
+#                                   ~/.claude/smart-agent-route/agent-board/(記入安裝清單)再指向那裡。
+#                                   只碰 env.CLAUDE_CODE_PLUGIN_DIRS 這一個變數(已含則不重複);備份與壞 JSON 的處理同 --with-statusline。
+#                                   --uninstall 會把本腳本加的路徑從該變數移除。用 plugin 市集裝的人不需要這個旗標。
+#   bash install.sh --with-reply-detail  另外把 plugins/reply-detail(「▸ 詳細說明」按鈕與回覆格式規則 mod)的目錄加進
+#                                   env.CLAUDE_CODE_PLUGIN_DIRS;行為、限制、--link／複製模式與 --uninstall 的處理全部同 --with-agent-board
+#                                   (複製模式的目的地是 ~/.claude/smart-agent-route/reply-detail/)。兩個旗標可同時使用。
 #
 # 複製安裝的項目記在 ~/.claude/.smart-agent-route-installed(每行一個相對 ~/.claude 的路徑)。
 # 有 smart-agent-route.plugin 就從它安裝;沒有(例如直接 clone repo)就用 plugins/smart-agent-route/。
@@ -33,6 +43,8 @@ MANIFEST="${HOME}/.claude/.smart-agent-route-installed"
 MODE="copy"
 WITH_EXPLORE=0
 WITH_STATUSLINE=0
+WITH_AGENT_BOARD=0
+WITH_REPLY_DETAIL=0
 for arg in "$@"; do
   case "$arg" in
     --agents-only)  MODE="agents" ;;
@@ -40,6 +52,8 @@ for arg in "$@"; do
     --uninstall)    MODE="uninstall" ;;
     --with-explore) WITH_EXPLORE=1 ;;
     --with-statusline) WITH_STATUSLINE=1 ;;
+    --with-agent-board) WITH_AGENT_BOARD=1 ;;
+    --with-reply-detail) WITH_REPLY_DETAIL=1 ;;
     *) printf '未知參數:%s\n' "$arg" >&2; exit 1 ;;
   esac
 done
@@ -52,15 +66,48 @@ die()  { printf '\n✘ %s\n' "$*" >&2; exit 1; }
 if [[ "$WITH_STATUSLINE" == 1 && ( "$MODE" == "agents" || "$MODE" == "uninstall" ) ]]; then
   die "--with-statusline 不能與 --agents-only 或 --uninstall 併用。"
 fi
+if [[ "$WITH_AGENT_BOARD" == 1 && ( "$MODE" == "agents" || "$MODE" == "uninstall" ) ]]; then
+  die "--with-agent-board 不能與 --agents-only 或 --uninstall 併用。"
+fi
+if [[ "$WITH_REPLY_DETAIL" == 1 && ( "$MODE" == "agents" || "$MODE" == "uninstall" ) ]]; then
+  die "--with-reply-detail 不能與 --agents-only 或 --uninstall 併用。"
+fi
+
+SETTINGS="${HOME}/.claude/settings.json"
+BOARD_SRC="${SCRIPT_DIR}/plugins/agent-board"
+BOARD_REL="smart-agent-route/agent-board"          # 複製模式的目的地(相對 ~/.claude,記入安裝清單)
+BOARD_COPY="${HOME}/.claude/${BOARD_REL}"
+DETAIL_SRC="${SCRIPT_DIR}/plugins/reply-detail"
+DETAIL_REL="smart-agent-route/reply-detail"
+DETAIL_COPY="${HOME}/.claude/${DETAIL_REL}"
 
 # ---------- 移除 ----------
 if [[ "$MODE" == "uninstall" ]]; then
   say "移除 ${PLUGIN_NAME}…"
+  # settings.json 的 CLAUDE_CODE_PLUGIN_DIRS:只移除本腳本加的 agent-board、reply-detail 路徑(--link 與複製兩種都處理),
+  # 沒有就不動檔案;要在下面刪掉 skill 之前做,因為要用 apply_settings.py
+  if [[ -f "$SETTINGS" ]] && command -v python3 >/dev/null 2>&1; then
+    apply="${SRC_DIR}/skills/route-setup/apply_settings.py"
+    [[ -f "$apply" ]] || apply="${SKILLS_DEST}/route-setup/apply_settings.py"
+    if [[ -f "$apply" ]]; then
+      for bp in "$BOARD_SRC" "$BOARD_COPY" "$DETAIL_SRC" "$DETAIL_COPY"; do
+        if grep -qF -- "$bp" "$SETTINGS"; then
+          rc=0
+          out="$(python3 "$apply" --settings "$SETTINGS" --remove-plugin-dir "$bp" 2>&1)" || rc=$?
+          if [[ "$rc" == 0 ]]; then
+            ok "已從 settings.json 的 CLAUDE_CODE_PLUGIN_DIRS 移除 ${bp/#$HOME/~}"
+          else
+            warn "無法修改 settings.json(${out}),請自行從 env.CLAUDE_CODE_PLUGIN_DIRS 移除 ${bp}"
+          fi
+        fi
+      done
+    fi
+  fi
   # 依清單移除複製安裝的項目。只接受 agents/、skills/、hooks/ 底下的單層名稱,
-  # 清單被改壞(例如出現 . 或空行)也不會刪到 ~/.claude 本身
+  # 清單被改壞(例如出現 . 或空行)也不會刪到 ~/.claude 本身;另外只多認 agent-board、reply-detail 的複製位置
   if [[ -f "$MANIFEST" ]]; then
     while IFS= read -r rel || [[ -n "$rel" ]]; do
-      [[ "$rel" =~ ^(agents|skills|hooks)/[A-Za-z0-9][A-Za-z0-9._-]*$ && "$rel" != *..* ]] || continue
+      [[ ( "$rel" =~ ^(agents|skills|hooks)/[A-Za-z0-9][A-Za-z0-9._-]*$ || "$rel" == "$BOARD_REL" || "$rel" == "$DETAIL_REL" ) && "$rel" != *..* ]] || continue
       t="${HOME}/.claude/${rel}"
       if [[ -L "$t" ]]; then
         warn "~/.claude/${rel} 現在是符號連結,不在這裡處理(連到本 repo 的連結會在下面移除)"
@@ -133,7 +180,6 @@ MSG
 }
 
 # ---------- 狀態列(--with-statusline) ----------
-SETTINGS="${HOME}/.claude/settings.json"
 STATUSLINE_CMD="python3 ~/.claude/hooks/smart-agent-route/statusline.py"
 
 print_statusline_snippet() {
@@ -179,6 +225,45 @@ print_statusline_tips() {
   say "裝好後用 /context 確認 Autocompact buffer(作者機器實測約 33k,約 120k 壓縮;提醒 10 萬後留 2 萬緩衝寫 handoff);有 modelSettings 逐模型覆蓋時要一併看。"
 }
 
+# ---------- 看板 mod(--with-agent-board) ----------
+print_mod_snippet() {  # $1 = 目錄
+  cat <<MSG
+
+  "env": { "CLAUDE_CODE_PLUGIN_DIRS": "$1" }
+MSG
+}
+
+# 實際寫入交給 apply_settings.py --add-plugin-dir(只碰 env.CLAUDE_CODE_PLUGIN_DIRS,其他變數與鍵不動;
+# 已含則不重複、壞 JSON 不寫、寫前備份)。複製模式要先由 install_one 把 agent-board 複製好,再呼叫這裡。
+setup_mod() {  # $1 = 名稱(agent-board 或 reply-detail), $2 = 要加進去的目錄
+  local name="$1" dir="$2"
+  say ""
+  say "設定 mod(${name})…"
+  local apply="${SRC_DIR}/skills/route-setup/apply_settings.py"
+  [[ -f "$apply" ]] || apply="${TMP:-/nonexistent}/skills/route-setup/apply_settings.py"
+  if ! command -v python3 >/dev/null 2>&1 || [[ ! -f "$apply" ]]; then
+    warn "找不到 python3(或 apply_settings.py),不修改 settings.json。要啟用請自行把下面這段加進去(已有 env 就只加那一個變數):"
+    print_mod_snippet "$dir"
+  else
+    local out rc=0
+    out="$(python3 "$apply" --settings "$SETTINGS" --add-plugin-dir "$dir" 2>&1)" || rc=$?
+    case "$rc" in
+      0)
+        ok "已處理 ~/.claude/settings.json 的 env.CLAUDE_CODE_PLUGIN_DIRS → ${dir/#$HOME/~}(其他鍵不變)"
+        while IFS= read -r line; do
+          if [[ "$line" == 備份* ]]; then ok "$line"; fi
+        done <<< "$out" ;;
+      3)
+        ok "env.CLAUDE_CODE_PLUGIN_DIRS 已包含 ${dir/#$HOME/~},不重複加入" ;;
+      *)
+        warn "無法修改 settings.json(${out}),不修改。要啟用請自行加入:"
+        print_mod_snippet "$dir" ;;
+    esac
+  fi
+  say "  VS Code:執行 Developer: Reload Window;終端機:重開 claude,載入才會生效。"
+  say "  用 plugin 市集安裝的人改用 /plugin install ${name}@smart-agent-route,不需要 --with-${name}。"
+}
+
 # ---------- 清掉舊版錯誤的安裝位置 ----------
 if [[ -e "$PLUGIN_DEST" || -L "$PLUGIN_DEST" ]]; then
   rm -rf "$PLUGIN_DEST"
@@ -218,6 +303,12 @@ if [[ "$MODE" == "link" ]]; then
   say ""
   print_hook_snippet
   if [[ "$WITH_STATUSLINE" == 1 ]]; then setup_statusline; print_statusline_tips; fi
+  if [[ "$WITH_AGENT_BOARD" == 1 ]]; then
+    if [[ -d "$BOARD_SRC" ]]; then setup_mod agent-board "$BOARD_SRC"; else warn "找不到 ${BOARD_SRC/#$HOME/~},略過 agent-board。"; fi
+  fi
+  if [[ "$WITH_REPLY_DETAIL" == 1 ]]; then
+    if [[ -d "$DETAIL_SRC" ]]; then setup_mod reply-detail "$DETAIL_SRC"; else warn "找不到 ${DETAIL_SRC/#$HOME/~},略過 reply-detail。"; fi
+  fi
   say ""
   say "之後重開 Claude Code,用 /agents 與 /hooks 確認。repo 搬家後連結會失效,重跑一次即可。"
   say "──────────────────────────────────────────"
@@ -294,6 +385,26 @@ if [[ "$MODE" == "agents" ]]; then
   warn "此模式只裝 agent:hook(context 提醒、session 開始帶入記憶)與 skill(handoff、research、usage-stats)不會生效。"
 fi
 
+BOARD_READY=0
+if [[ "$WITH_AGENT_BOARD" == 1 ]]; then
+  if [[ ! -d "$BOARD_SRC" ]]; then
+    warn "找不到 plugins/agent-board/(從 .plugin 封包安裝時不含它),略過 agent-board。"
+  else
+    install_one "$BOARD_SRC" "$BOARD_REL"
+    if in_manifest "$BOARD_REL" && [[ ! -L "$BOARD_COPY" ]]; then BOARD_READY=1; fi
+  fi
+fi
+
+DETAIL_READY=0
+if [[ "$WITH_REPLY_DETAIL" == 1 ]]; then
+  if [[ ! -d "$DETAIL_SRC" ]]; then
+    warn "找不到 plugins/reply-detail/(從 .plugin 封包安裝時不含它),略過 reply-detail。"
+  else
+    install_one "$DETAIL_SRC" "$DETAIL_REL"
+    if in_manifest "$DETAIL_REL" && [[ ! -L "$DETAIL_COPY" ]]; then DETAIL_READY=1; fi
+  fi
+fi
+
 if [[ "$WITH_EXPLORE" == 1 ]]; then
   if [[ -f "${AGENTS_DEST}/Explore.md" ]]; then
     warn "~/.claude/agents/Explore.md 已存在,不覆蓋。要換成 plugin 的版本請先自行備份並刪除。"
@@ -329,6 +440,8 @@ say "3. 把主對話設成 Opus(不會自動改這個):"
 say "     /model opus"
 say ""
 if [[ "$WITH_STATUSLINE" == 1 ]]; then setup_statusline; print_statusline_tips; fi
+if [[ "$BOARD_READY" == 1 ]]; then setup_mod agent-board "$BOARD_COPY"; fi
+if [[ "$DETAIL_READY" == 1 ]]; then setup_mod reply-detail "$DETAIL_COPY"; fi
 say ""
 say "更新:之後重跑 bash install.sh 即可(清單內的項目會被覆蓋更新)。"
 cat <<'EOF'

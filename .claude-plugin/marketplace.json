@@ -13,6 +13,24 @@
       "author": {
         "name": "Novie131"
       }
+    },
+    {
+      "name": "agent-board",
+      "source": "./plugins/agent-board",
+      "description": "在 Claude Code 聊天面板即時顯示子 agent 狀態的看板（試作版）。",
+      "version": "0.1.0",
+      "author": {
+        "name": "Novie131"
+      }
+    },
+    {
+      "name": "reply-detail",
+      "source": "./plugins/reply-detail",
+      "description": "在最後一則回覆下方加「▸ 詳細說明」按鈕，並注入精簡版三段式回覆格式規則。",
+      "version": "0.1.0",
+      "author": {
+        "name": "Novie131"
+      }
     }
   ]
 }

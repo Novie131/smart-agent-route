@@ -54,6 +54,20 @@ bash install.sh
 
 另建議 `"autoCompactWindow": 153000`(腳本不會寫):扣掉約 33k buffer 後約 120k 自動壓縮,10 萬提醒後留 2 萬緩衝寫 handoff,壓縮後自動帶回交接筆記。33k 是作者機器的實測值,寫入後用 `/context` 確認壓縮點約 120k。
 
+### 看板 mod(選用)
+
+加 `--with-agent-board`(可與預設複製模式或 `--link` 併用;不能與 `--agents-only`、`--uninstall` 併用)。VS Code 不能帶 `--plugin-dir`,所以這個 mod(`plugins/agent-board`)要靠環境變數 `CLAUDE_CODE_PLUGIN_DIRS` 載入;腳本會替你把目錄加進 `~/.claude/settings.json` 的 `env.CLAUDE_CODE_PLUGIN_DIRS`(多個路徑用 `:` 分隔)。只碰這一個變數:沒有 `env` 就建立,已有值就附加,已含該路徑則不重複;先備份成 `settings.json.bak-<時間>`;JSON 壞掉或沒有 python3 則不修改,改印手動片段。`--link` 時路徑指向 repo 內的 `plugins/agent-board`;複製模式則先複製到 `~/.claude/smart-agent-route/agent-board/`(記入安裝清單)再指向那裡;從 `.plugin` 封包安裝時不含 agent-board,會略過。`--uninstall` 會把本腳本加的路徑從該變數移除(其他路徑與變數不動)。
+
+裝完,VS Code 執行 Developer: Reload Window、終端機重開 `claude` 才會載入。用 plugin 市集安裝的人不需要這個旗標,改用 `/plugin install agent-board@smart-agent-route`。手動做法是在 `settings.json` 加:
+
+```json
+"env": { "CLAUDE_CODE_PLUGIN_DIRS": "/絕對路徑/plugins/agent-board" }
+```
+
+### 詳細說明按鈕與回覆格式（選用）
+
+加 `--with-reply-detail`（限制、`--link`／複製模式、`--uninstall` 的處理全部同 `--with-agent-board`，可與它同時使用）。這個 mod（`plugins/reply-detail`）會在最後一則助理回覆底下畫「▸ 詳細說明」按鈕，按下後要求把上一則回覆改寫成詳細版；同時在 system prompt 注入「精簡版三段式（現況／你要做的／需要你決定／提供）」的回覆格式規則（只對主對話生效，子 agent 忽略）。一樣靠 `env.CLAUDE_CODE_PLUGIN_DIRS` 載入：`--link` 時路徑指向 repo 內的 `plugins/reply-detail`；複製模式則先複製到 `~/.claude/smart-agent-route/reply-detail/`（記入安裝清單）再指向那裡；從 `.plugin` 封包安裝時不含它，會略過。`--uninstall` 只移除本腳本加的這條路徑。裝完，VS Code 執行 Developer: Reload Window、終端機重開 `claude` 才會載入。用 plugin 市集安裝的人改用 `/plugin install reply-detail@smart-agent-route`。
+
 ### 驗證
 
 ```
