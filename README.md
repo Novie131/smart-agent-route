@@ -6,6 +6,17 @@
 
 > A Claude Code plugin for tiered model delegation — Opus plans, Sonnet executes, Haiku retrieves and digests bulk output — plus context-length reminders with handoff notes so the main conversation stays short, and persistent, source-cited memory that accumulates across conversations. English documentation: [README.en.md](README.en.md).
 
+**目的**：用同樣的預算做更多事，而且長時間工作也不會因為對話越拉越長而變貴、變亂。
+
+**為什麼用它**
+
+- **貴的模型只用在刀口上**：Opus 只負責想與判斷，寫程式交給 Sonnet，讀 log、看截圖、查資料交給 Haiku。
+- **長對話不再失控**：context 超過 10 萬 token 就提醒，先寫交接筆記；壓縮、`/clear` 或隔天開新對話，進度都會自動接回來。
+- **裝完就能用**：兩行指令，不用改你的 CLAUDE.md。進階設定一次只問一項，改設定前先備份。
+- **做完會驗證，岔路會停下來問**：子 agent 回報完成前必須驗證；遇到需要決策的地方，列出選項讓你選，不會自作主張。失敗有固定的升級順序，不會無限重試。
+- **記憶跨對話累積**：記憶就是一般的 Markdown 檔，可以進 git、用 Obsidian 開；查外部資料時附上來源。
+- **效果量得到**：`usage-stats` 可以量出主對話 context 長度，以及有多少工作是子 agent 做的。
+
 ---
 
 ## 這解決什麼問題

@@ -6,6 +6,17 @@
 
 The Traditional Chinese docs are the primary version; this English version is a translation and may lag behind.
 
+**Goal**: get more done on the same budget, without long working sessions getting more expensive and messier as the conversation grows.
+
+**Why use it**
+
+- **The expensive model only where it counts**: Opus only thinks and decides; writing code goes to Sonnet, and reading logs, looking at screenshots, and searching go to Haiku.
+- **Long conversations stay under control**: past 100k tokens of context you get a reminder and a handoff note is written first; after a compact, a `/clear`, or a new conversation the next day, your progress comes back automatically.
+- **Works right after install**: two commands, no changes to your CLAUDE.md. Advanced setup asks one item at a time and backs up your settings before changing them.
+- **Verifies its work, stops at forks**: subagents must verify before reporting done; when a decision is needed, they list the options for you instead of choosing on their own. Failures follow a fixed escalation order, with no endless retries.
+- **Memory that accumulates across conversations**: memory is plain Markdown files you can put in git or open in Obsidian; external information is saved with its source.
+- **Measurable**: `usage-stats` measures main-conversation context length and how much of the work subagents did.
+
 ---
 
 ## What problem this solves
