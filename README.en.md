@@ -162,6 +162,8 @@ After subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, 
 
 The reminder text also includes the estimated compact point.
 
+**Checking the fixed cost**: to see what every turn pays up front (system prompt, tool definitions, MCP, skills, memory files), type `/context` in a conversation, or run `claude -p "/context"` in a terminal (no interactive session needed; it is computed locally and does not call the model). On the author's machine a fresh conversation starts at about 29k tokens, about 18k of which is Claude Code's own system prompt and tool definitions; tools marked deferred are loaded only when used and are not counted. Fixed content hits the prompt cache every turn, so it is rarely the main cost: deal with conversation length and output first, and only then consider removing unused MCP servers or plugins.
+
 ---
 
 ## Extending: when to add a Haiku layer
