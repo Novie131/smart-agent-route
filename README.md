@@ -16,6 +16,8 @@
 - **做完會驗證，岔路會停下來問**：子 agent 回報完成前必須驗證；遇到需要決策的地方，列出選項讓你選，不會自作主張。失敗有固定的升級順序，不會無限重試。
 - **記憶跨對話累積**：記憶就是一般的 Markdown 檔，可以進 git、用 Obsidian 開；查外部資料時附上來源。
 - **效果量得到**：`usage-stats` 可以量出主對話 context 長度、每個 agent 用了多少 token、依 API 牌價估算的金額，也能輸出一份有每日圖表的 HTML 報表。
+- **看得到子 agent 在做什麼**（選裝）：`agent-board` 看板常駐在輸入框上方，即時列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額。
+- **回覆一眼看懂**（選裝）：`reply-detail` 讓回覆預設只講現況、你要做的、需要你決定的事；要細節時按「▸ 詳細說明」。
 
 ---
 
@@ -154,6 +156,21 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }
 ```
 
+### 子 agent 看板與詳細說明按鈕（選用）
+
+兩個選裝的 mod（Claude Code 的介面擴充，需要 2.1.299 以上；作者在 VS Code 擴充 2.1.301 實測）：
+
+| mod | 做什麼 |
+|---|---|
+| `agent-board` | 常駐面板列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額（API 牌價），上方顯示合計。可以縮小成一行摘要，用 `/agent-board` 開關；底部有「▸ 詳細說明」按鈕 |
+| `reply-detail` | 在 system prompt 注入回覆格式：預設精簡三段（現況／你要做的／需要你決定或提供），只對主對話生效。最後一則回覆底下有「▸ 詳細說明」按鈕，按下會把上一則改寫成詳細版；也可以直接輸入「詳細說明」 |
+
+安裝：用 plugin 市集的話是 `/plugin install agent-board@smart-agent-route`、`/plugin install reply-detail@smart-agent-route`；用 install.sh 的話加 `--with-agent-board`、`--with-reply-detail`（VS Code 不能帶 `--plugin-dir`，腳本會把目錄加進 `settings.json` 的 `env.CLAUDE_CODE_PLUGIN_DIRS`）。裝完在 VS Code 執行 Developer: Reload Window。
+
+agent-board 的設定（plugin 的 userConfig，預設都開）：`autoOpen` 子 agent 啟動時自動開面板、`persistent` 對話一開始就開且不自動收起、`detailButton` 看板底部的詳細說明按鈕。
+
+限制：mod 不能在 VS Code 輸入框的工具列（模型選單那一排）加按鈕，也畫不到輸入框上方的橫條（只支援終端機與桌面版），所以按鈕放在回覆底下和看板裡。另外，Claude Code 對不是使用者自己打開的面板有寬度門檻（沒手動開過要 144 欄），VS Code 聊天面板常常不夠寬，面板會停在看不見的「未放置」狀態；常駐模式會在畫面重連、寬度改變、回合開始與結束時檢查並補開。
+
 ### 看固定成本
 
 想知道每一輪固定要付多少（系統提示、工具定義、MCP、skills、記憶檔），在對話裡輸入 `/context`，或在 terminal 跑 `claude -p "/context"`（不用開互動對話，在本機計算、不呼叫模型）。作者機器上新對話的固定成本約 29k token，其中約 18k 是 Claude Code 內建的系統提示與工具定義；標為 deferred 的工具用到才載入，不計入。固定內容每輪都會命中快取，通常不是大頭，先處理對話長度與輸出，再考慮拔掉不用的 MCP 或 plugin。
@@ -234,6 +251,8 @@ bash install.sh --link             # 用符號連結裝 agent、skill、hook(改
 bash install.sh --uninstall        # 移除(依安裝清單,不動你自己的檔案)
 bash install.sh --with-explore     # 另外安裝 Haiku 版 Explore 到 ~/.claude/agents/
 bash install.sh --with-statusline  # 另外在 ~/.claude/settings.json 加 context 狀態列
+bash install.sh --with-agent-board   # 另外載入子 agent 看板 mod(寫入 settings.json 的 env.CLAUDE_CODE_PLUGIN_DIRS)
+bash install.sh --with-reply-detail  # 另外載入詳細說明按鈕與回覆格式 mod(同上)
 ```
 
 注意事項：
@@ -241,6 +260,7 @@ bash install.sh --with-statusline  # 另外在 ~/.claude/settings.json 加 conte
 - 這種模式下名稱沒有命名空間：agent 是 `worker`，skill 是 `/handoff`（plugin 安裝則是 `smart-agent-route:worker`）。
 - 裝了哪些東西記在 `~/.claude/.smart-agent-route-installed`。內容完全相同的既有檔案會併入清單；內容不同的（你自己的）不會覆蓋，並給警告。
 - `--with-statusline` 可與預設的複製模式或 `--link` 併用，不能與 `--agents-only`、`--uninstall` 併用。它只動 `settings.json` 的 `statusLine` 這個 key：檔案不存在就建立，已有 `statusLine` 絕不覆蓋（只印出建議片段），其餘情況寫入前先備份成 `settings.json.bak-<timestamp>`。JSON 壞掉或沒有 python3 時什麼都不做。
+- `--with-agent-board`、`--with-reply-detail` 的限制同 `--with-statusline`，兩者可以同時使用。它們只動 `env.CLAUDE_CODE_PLUGIN_DIRS`：已有的路徑保留，寫入前先備份；`--uninstall` 只移除自己加的路徑。
 - install.sh 不會改你 `settings.json` 裡的 hooks，結尾會印出一段片段，由你自己併進 `"hooks"`。之後執行 `/route-setup` 取得完整功能。
 
 更多說明見 [docs/部署安裝.md](docs/部署安裝.md)與 [plugins/smart-agent-route/INSTALL.md](plugins/smart-agent-route/INSTALL.md)（英文版：[INSTALL.en.md](plugins/smart-agent-route/INSTALL.en.md)）。
@@ -258,6 +278,8 @@ smart-agent-route/
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup
 │   ├── hooks/                        ← SessionStart 帶入、context 長度提醒
 │   （範本在 skills/route-setup/templates/：MEMORY.md、知識庫說明、Explore、Haiku 層範本）
+├── plugins/agent-board/              ← 子 agent 看板 mod（選裝）
+├── plugins/reply-detail/             ← 詳細說明按鈕與回覆格式 mod（選裝）
 ├── docs/
 │   ├── spec.md                       ← 架構設計與實作附錄
 │   ├── 部署安裝.md
@@ -270,7 +292,7 @@ smart-agent-route/
 
 ## 狀態
 
-**v0.8.0 — 早期版本。** 0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-tiered-agents070-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。
+**v0.8.0 — 早期版本。** 0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-tiered-agents070-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板和回覆底下的按鈕；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。
 
 已知會需要調整的地方：
 
@@ -279,6 +301,7 @@ smart-agent-route/
 - `MEMORY.md` 會腐化，需要你定期整理（超過 150 行即是訊號）
 - Haiku 執行層預設留空，見 `plugins/smart-agent-route/skills/route-setup/templates/runner.md.example` 的啟用條件
 - `harvester` 只讀得到本機 session
+- mod 的 API 標示為搶先體驗（early access），Claude Code 改版時可能要跟著調整
 
 歡迎開 issue。
 

@@ -16,6 +16,8 @@ The Traditional Chinese docs are the primary version; this English version is a 
 - **Verifies its work, stops at forks**: subagents must verify before reporting done; when a decision is needed, they list the options for you instead of choosing on their own. Failures follow a fixed escalation order, with no endless retries.
 - **Memory that accumulates across conversations**: memory is plain Markdown files you can put in git or open in Obsidian; external information is saved with its source.
 - **Measurable**: `usage-stats` measures main-conversation context length, how many tokens each agent used, and an estimated cost at API list prices, and can write an HTML report with daily charts.
+- **See what subagents are doing** (optional): the `agent-board` panel stays above the prompt and shows each subagent's type, model, status, elapsed time, tokens, and estimated cost as it runs.
+- **Replies you can read at a glance** (optional): `reply-detail` makes replies lead with the current state, what you need to do, and what you need to decide; press "▸ 詳細說明" (details) when you want the full version.
 
 ---
 
@@ -154,6 +156,21 @@ Shows `model │ ctx 95k │ reminder 100k │ compact 120k`, with the compact p
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }
 ```
 
+### Subagent board and details button (optional)
+
+Two optional mods (Claude Code interface extensions; they need 2.1.299 or later and were tested by the author in the VS Code extension 2.1.301):
+
+| mod | What it does |
+|---|---|
+| `agent-board` | A persistent panel listing each subagent's type, model, status, elapsed time, tokens, and estimated cost (API list prices), with totals at the top. It collapses to a one-line summary and toggles with `/agent-board`; a "▸ 詳細說明" (details) button sits at the bottom |
+| `reply-detail` | Injects a reply format into the system prompt: by default a short three-part reply (current state / what you need to do / what you need to decide or provide), for the main conversation only. A "▸ 詳細說明" button under the last reply asks for a detailed rewrite of it; typing "詳細說明" does the same |
+
+Install: from the plugin marketplace, `/plugin install agent-board@smart-agent-route` and `/plugin install reply-detail@smart-agent-route`; with install.sh, add `--with-agent-board` and `--with-reply-detail` (VS Code cannot pass `--plugin-dir`, so the script adds the folders to `env.CLAUDE_CODE_PLUGIN_DIRS` in `settings.json`). Afterwards, run Developer: Reload Window in VS Code.
+
+agent-board settings (plugin userConfig, all on by default): `autoOpen` opens the panel when a subagent starts, `persistent` opens it when the session starts and keeps it open, `detailButton` shows the details button at the bottom.
+
+Limits: a mod cannot add buttons to the VS Code prompt toolbar (the row with the model picker), and cannot draw the band above the prompt (terminal and desktop only), so the buttons live under the reply and in the board. Also, Claude Code applies a width threshold to panes the user did not open (144 columns if never opened by hand), which the VS Code chat panel often falls short of, leaving the pane invisible and "unplaced"; persistent mode checks and reopens it when a surface attaches, the width changes, and a turn starts or ends.
+
 ### Checking the fixed cost
 
 To see what every turn pays up front (system prompt, tool definitions, MCP, skills, memory files), type `/context` in a conversation, or run `claude -p "/context"` in a terminal (no interactive session needed; it is computed locally and does not call the model). On the author's machine a fresh conversation starts at about 29k tokens, about 18k of which is Claude Code's own system prompt and tool definitions; tools marked deferred are loaded only when used and are not counted. Fixed content hits the prompt cache every turn, so it is rarely the main cost: deal with conversation length and output first, and only then consider removing unused MCP servers or plugins.
@@ -234,6 +251,8 @@ bash install.sh --link             # symlink agents, skills, hooks (edits in the
 bash install.sh --uninstall        # remove (follows the install manifest, leaves your own files alone)
 bash install.sh --with-explore     # also install the Haiku-based Explore into ~/.claude/agents/
 bash install.sh --with-statusline  # also add the context status line to ~/.claude/settings.json
+bash install.sh --with-agent-board   # also load the subagent board mod (written to env.CLAUDE_CODE_PLUGIN_DIRS in settings.json)
+bash install.sh --with-reply-detail  # also load the details button and reply format mod (same mechanism)
 ```
 
 Notes:
@@ -241,6 +260,7 @@ Notes:
 - Names have no namespace in this mode: the agent is `worker` and the skill is `/handoff` (plugin install uses `smart-agent-route:worker`).
 - Installed items are recorded in `~/.claude/.smart-agent-route-installed`. Existing files with identical content are added to the manifest; files with different content (yours) are not overwritten, and you get a warning.
 - `--with-statusline` can be combined with the default copy mode or `--link`, but not with `--agents-only` or `--uninstall`. It touches only the `statusLine` key in `settings.json`: it creates the file if missing, never overwrites an existing `statusLine` (it only prints a suggested snippet), and otherwise backs the file up as `settings.json.bak-<timestamp>` before writing. It does nothing if the JSON is broken or python3 is missing.
+- `--with-agent-board` and `--with-reply-detail` have the same restrictions as `--with-statusline` and can be used together. They touch only `env.CLAUDE_CODE_PLUGIN_DIRS`: existing paths are kept and the file is backed up before writing; `--uninstall` removes only the paths they added.
 - install.sh does not edit your `settings.json` hooks. It prints a snippet at the end that you merge into `"hooks"` yourself. After that, run `/route-setup` for the full feature set.
 
 For more detail, see the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md) (Traditional Chinese only) and [plugins/smart-agent-route/INSTALL.en.md](plugins/smart-agent-route/INSTALL.en.md).
@@ -258,6 +278,8 @@ smart-agent-route/
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup
 │   ├── hooks/                        ← SessionStart injection, context-length reminder
 │   (templates are in skills/route-setup/templates/: MEMORY.md, knowledge-base guide, Explore, Haiku-layer example)
+├── plugins/agent-board/              ← subagent board mod (optional)
+├── plugins/reply-detail/             ← details button and reply format mod (optional)
 ├── docs/
 │   ├── spec.md                       ← architecture design and implementation appendix (Traditional Chinese)
 │   └── ...                           ← deployment and publishing notes (Traditional Chinese only)
@@ -269,7 +291,7 @@ smart-agent-route/
 
 ## Status
 
-**v0.8.0, early version.** Versions up to 0.7.0 were named tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet.
+**v0.8.0, early version.** Versions up to 0.7.0 were named tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board and the button under the reply; persistent mode, the button in the board, and the reply-format injection are still being validated.
 
 Known rough edges:
 
@@ -278,6 +300,7 @@ Known rough edges:
 - `MEMORY.md` decays and needs periodic tidying (over 150 lines is the signal).
 - The Haiku execution layer is empty by default; see the enabling conditions in `plugins/smart-agent-route/skills/route-setup/templates/runner.md.example`.
 - `harvester` only reads local sessions.
+- The mod API is marked early access; Claude Code updates may require adjustments.
 
 Issues are welcome.
 
