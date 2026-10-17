@@ -1,6 +1,6 @@
 # Smart Agent Route
 
-[English](README.en.md) | [繁體中文](README.md)
+<p align="center"><a href="README.md"><b>繁體中文</b></a> · <b>English</b></p>
 
 A Claude Code plugin for tiered model delegation: **the main conversation thinks with Opus, Sonnet executes, and Haiku handles retrieval and bulk reading.** It reminds you when the context window gets long and writes handoff notes, so you can clear the conversation without worry. Knowledge accumulates across conversations, and external information is cited with its source.
 
@@ -114,8 +114,8 @@ Subagents finish with a fixed report format so the main conversation can decide 
 
 Write the index as conditions, not topics:
 
-- ✗ `setup.md — about environment setup` (a topic)
-- ✓ `setup.md — read first when you need to change paths or a command will not run` (a condition)
+- Bad: `setup.md — about environment setup` (a topic)
+- Good: `setup.md — read first when you need to change paths or a command will not run` (a condition)
 
 Where memory lives:
 
