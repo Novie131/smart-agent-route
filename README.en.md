@@ -15,7 +15,7 @@ The Traditional Chinese docs are the primary version; this English version is a 
 - **Works right after install**: two commands, no changes to your CLAUDE.md. Advanced setup asks one item at a time and backs up your settings before changing them.
 - **Verifies its work, stops at forks**: subagents must verify before reporting done; when a decision is needed, they list the options for you instead of choosing on their own. Failures follow a fixed escalation order, with no endless retries.
 - **Memory that accumulates across conversations**: memory is plain Markdown files you can put in git or open in Obsidian; external information is saved with its source.
-- **Measurable**: `usage-stats` measures main-conversation context length and how much of the work subagents did.
+- **Measurable**: `usage-stats` measures main-conversation context length, how many tokens each agent used, and an estimated cost at API list prices, and can write an HTML report with daily charts.
 
 ---
 
@@ -105,7 +105,7 @@ hook : session start injects the delegation guide and memory; a reminder fires w
 | harvester | Sonnet | Mines past conversation transcripts into knowledge-base notes. Only runs when you explicitly ask; it is costly |
 | Explore (optional) | Haiku | The built-in Explore runs on Opus when the main conversation is Opus. A plugin cannot override it (only a user- or project-level agent named `Explore` can), so route-setup or `bash install.sh --with-explore` installs a Haiku version into `~/.claude/agents/` |
 
-- **Skills**: `handoff` writes `handoff.md`; `research` looks up external information and cites sources; `usage-stats` measures main-conversation context length and the share of work done by subagents (read-only); `route-setup` is the one-time full setup.
+- **Skills**: `handoff` writes `handoff.md`; `research` looks up external information and cites sources; `usage-stats` measures main-conversation context length and, per agent, dispatch counts, token usage, and estimated cost (read-only; add `--html` for a report with charts); `route-setup` is the one-time full setup.
 - **Hooks**: SessionStart injects the delegation guide, the memory index, and the handoff note; UserPromptSubmit reminds you when the context window is too long.
 
 How the main conversation delegates does not depend on your CLAUDE.md: the SessionStart hook injects the delegation table at the start of every session (see `hooks/guide.md`). Design rationale and trade-offs are in [docs/spec.md](docs/spec.md) (Traditional Chinese).

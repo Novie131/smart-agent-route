@@ -15,7 +15,7 @@
 - **裝完就能用**：兩行指令，不用改你的 CLAUDE.md。進階設定一次只問一項，改設定前先備份。
 - **做完會驗證，岔路會停下來問**：子 agent 回報完成前必須驗證；遇到需要決策的地方，列出選項讓你選，不會自作主張。失敗有固定的升級順序，不會無限重試。
 - **記憶跨對話累積**：記憶就是一般的 Markdown 檔，可以進 git、用 Obsidian 開；查外部資料時附上來源。
-- **效果量得到**：`usage-stats` 可以量出主對話 context 長度，以及有多少工作是子 agent 做的。
+- **效果量得到**：`usage-stats` 可以量出主對話 context 長度、每個 agent 用了多少 token、依 API 牌價估算的金額，也能輸出一份有每日圖表的 HTML 報表。
 
 ---
 
@@ -105,7 +105,7 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒
 | harvester | Sonnet | 把歷史對話逐字稿挖進知識庫筆記。只在你明確要求時才跑，成本不低 |
 | Explore（選裝） | Haiku | 內建 Explore 在主對話是 Opus 時也跑 Opus。plugin 蓋不掉它（只有使用者或專案層級、名為 `Explore` 的 agent 能覆蓋），所以用 route-setup 或 `bash install.sh --with-explore` 把 Haiku 版裝進 `~/.claude/agents/` |
 
-- **Skills**：`handoff` 寫 `handoff.md`；`research` 查外部資料並附來源；`usage-stats` 量測主對話 context 長度與子 agent 完成的工作比例（唯讀）；`route-setup` 是一次性完整設定。
+- **Skills**：`handoff` 寫 `handoff.md`；`research` 查外部資料並附來源；`usage-stats` 量測主對話 context 長度、各 agent 的派工次數、token 用量與估計金額（唯讀；加 `--html` 可輸出圖表報表）；`route-setup` 是一次性完整設定。
 - **Hooks**：SessionStart 帶入分工慣例、記憶索引與交接筆記；UserPromptSubmit 在 context 過長時提醒。
 
 主對話怎麼分工，不靠你的 CLAUDE.md：SessionStart hook 會在每個 session 開始時把分工表帶進去（內容見 `hooks/guide.md`）。設計理由與取捨見 [docs/spec.md](docs/spec.md)。
