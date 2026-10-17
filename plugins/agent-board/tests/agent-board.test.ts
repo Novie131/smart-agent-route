@@ -263,3 +263,70 @@ test('看板的「▸ 詳細說明」按鈕會代使用者送出詳細說明訊�
   expect(showDetailButton({ detailButton: false })).toBe(false)
   expect(showDetailButton({})).toBe(true)
 })
+
+// 模擬引擎的放置：placed=false 時 ui.open 只會讓面板等待放置（isPlaced: false）
+function setupPlacement($: any, on: any, state: { placed: boolean }) {
+  const calls: any[] = []
+  // 面板的放置狀態在 ui.open 當下決定；null 表示沒有面板
+  let pane: { isPlaced: boolean } | null = null
+  mock.clock(on)
+  on('session.start', () => ({ cwd: '/work' }))
+  on('session.attach', ($: any, e: any) => ({ clientId: e.clientId }))
+  on('session.measure', ($: any, e: any) => ({ changed: e.changed }))
+  on('turn.complete', ($: any, e: any) => ({ text: e.answer }))
+  on('command.register', () => ({ value: undefined }))
+  on('turn.start', ($: any, e: any) => ({ turnId: e.turnId }))
+  on('agent.list', () => ({ value: [] }))
+  on('ui.status', () => ({ value: undefined }))
+  on('ui.panes', () => ({ value: pane ? [{ id: 'agent-board', ...pane }] : [] }))
+  on('ui.open', ($: any, e: any) => { calls.push({ t: 'open', e }); pane = { isPlaced: state.placed }; return { value: { isPlaced: state.placed } } })
+  on('ui.close', ($: any, e: any) => { calls.push({ t: 'close', e }); pane = null; return { value: undefined } })
+  // 模擬畫面重連後面板變成未放置
+  ;(state as any).unplace = () => { if (pane) pane.isPlaced = false }
+  return calls
+}
+
+test('常駐：session.start 開的面板沒放上畫面時，turn.start 會重開；已放上就不重複開', async ($, on) => {
+  const state = { placed: false }
+  const calls = setupPlacement($, on, state)
+  await $.session.start({ surface: 'vscode', isInteractive: true, cwd: '/work' })
+  expect(calls.map((c) => c.t)).toEqual(['open'])
+  state.placed = true // 使用者送出訊息觸發的 ui.open 不受寬度門檻限制
+  await $.turn.start({ turnId: 't1' } as any)
+  expect(calls.map((c) => c.t)).toEqual(['open', 'open'])
+  await $.turn.start({ turnId: 't2' } as any)
+  expect(calls.map((c) => c.t)).toEqual(['open', 'open'])
+})
+
+test('常駐：畫面重連、寬度改變、回合結束時都會補開不在畫面上的面板', async ($, on) => {
+  const state = { placed: true }
+  const calls = setupPlacement($, on, state)
+  await $.session.start({ surface: 'vscode', isInteractive: true, cwd: '/work' })
+  ;(state as any).unplace()
+  await $.session.attach({ clientId: 'c2' } as any)
+  expect(calls.map((c) => c.t)).toEqual(['open', 'open'])
+  ;(state as any).unplace()
+  await $.session.measure({ changed: ['columns'] } as any)
+  expect(calls.map((c) => c.t)).toEqual(['open', 'open', 'open'])
+  ;(state as any).unplace()
+  await $.turn.complete({ answer: 'x', reason: 'answer' } as any)
+  expect(calls.map((c) => c.t)).toEqual(['open', 'open', 'open', 'open'])
+  // 已在畫面上就不重複開
+  await $.session.attach({ clientId: 'c3' } as any)
+  expect(calls.length).toBe(4)
+})
+
+test('/agent-board 遇到未放置的面板會打開而不是關掉；用它關掉後常駐不再自動重開', async ($, on) => {
+  const state = { placed: false }
+  const calls = setupPlacement($, on, state)
+  await $.session.start({ surface: 'vscode', isInteractive: true, cwd: '/work' })
+  state.placed = true
+  await $.command.run({ command: 'agent-board', args: '' })
+  expect(calls.map((c) => c.t)).toEqual(['open', 'open'])
+  await $.command.run({ command: 'agent-board', args: '' })
+  expect(calls.map((c) => c.t)).toEqual(['open', 'open', 'close'])
+  await $.turn.start({ turnId: 't1' } as any)
+  expect(calls.map((c) => c.t)).toEqual(['open', 'open', 'close'])
+  await $.command.run({ command: 'agent-board', args: '' })
+  expect(calls.map((c) => c.t)).toEqual(['open', 'open', 'close', 'open'])
+})
