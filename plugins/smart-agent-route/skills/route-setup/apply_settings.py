@@ -13,6 +13,7 @@
 import argparse
 import json
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -127,8 +128,7 @@ def main(argv=None):
                 bak = None
                 if existed:
                     bak = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
-                    with open(path, "rb") as src, open(bak, "wb") as dst:
-                        dst.write(src.read())
+                    shutil.copy2(path, bak)  # 連同權限一起複製，原檔是 0600 時備份也是
                 data.update(to_write)
                 write_atomic(path, data)
             except OSError as e:
