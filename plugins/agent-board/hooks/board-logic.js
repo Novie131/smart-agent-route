@@ -21,7 +21,7 @@ export function showDetailButton(options) {
   return !options || options.detailButton !== false
 }
 
-// 按下「▸ 詳細說明」時代使用者送出的訊息；字串與 ~/.claude/mods/reply-detail 一致
+// 按下「▸ 詳細說明」時代使用者送出的訊息；reply-detail 的回覆格式規則認得「詳細說明」開頭的訊息
 export const DETAIL_PROMPT = '詳細說明：把上一則回覆改寫成詳細版（背景、做了什麼、證據與檔案位置、取捨與風險）'
 
 // options.persistent 預設 true：session 開始就開面板，turn.start 不收起

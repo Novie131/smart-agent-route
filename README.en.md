@@ -163,13 +163,13 @@ Two optional mods (Claude Code interface extensions; they need 2.1.299 or later 
 | mod | What it does |
 |---|---|
 | `agent-board` | A persistent panel listing each subagent's type, model, status, elapsed time, tokens, and estimated cost (API list prices), with totals at the top. It collapses to a one-line summary and toggles with `/agent-board`; a "▸ 詳細說明" (details) button sits at the bottom |
-| `reply-detail` | Injects a reply format into the system prompt: by default a short three-part reply (current state / what you need to do / what you need to decide or provide), for the main conversation only. A "▸ 詳細說明" button under the last reply asks for a detailed rewrite of it; typing "詳細說明" does the same |
+| `reply-detail` | Injects a reply format into the system prompt: by default a short three-part reply (current state / what you need to do / what you need to decide or provide), for the main conversation only. Press "▸ 詳細說明" (details) on the board, or type "詳細說明", to get a detailed rewrite of the previous reply |
 
 Install: from the plugin marketplace, `/plugin install agent-board@smart-agent-route` and `/plugin install reply-detail@smart-agent-route`; with install.sh, add `--with-agent-board` and `--with-reply-detail` (VS Code cannot pass `--plugin-dir`, so the script adds the folders to `env.CLAUDE_CODE_PLUGIN_DIRS` in `settings.json`). Afterwards, run Developer: Reload Window in VS Code.
 
 agent-board settings (plugin userConfig, all on by default): `autoOpen` opens the panel when a subagent starts, `persistent` opens it when the session starts and keeps it open, `detailButton` shows the details button at the bottom.
 
-Limits: a mod cannot add buttons to the VS Code prompt toolbar (the row with the model picker), and cannot draw the band above the prompt (terminal and desktop only), so the buttons live under the reply and in the board. Also, Claude Code applies a width threshold to panes the user did not open (144 columns if never opened by hand), which the VS Code chat panel often falls short of, leaving the pane invisible and "unplaced"; persistent mode checks and reopens it when a surface attaches, the width changes, and a turn starts or ends.
+Limits: a mod cannot add buttons to the VS Code prompt toolbar (the row with the model picker), so the "▸ 詳細說明" button lives in the board. The button could also be drawn under the reply, but VS Code wraps any message a mod draws in a frame labeled "From the … plugin" (a mod cannot turn it off), so that is not used. Also, Claude Code applies a width threshold to panes the user did not open (144 columns if never opened by hand), which the VS Code chat panel often falls short of, leaving the pane invisible and "unplaced"; persistent mode checks and reopens it when a surface attaches, the width changes, and a turn starts or ends.
 
 ### Checking the fixed cost
 
@@ -252,7 +252,7 @@ bash install.sh --uninstall        # remove (follows the install manifest, leave
 bash install.sh --with-explore     # also install the Haiku-based Explore into ~/.claude/agents/
 bash install.sh --with-statusline  # also add the context status line to ~/.claude/settings.json
 bash install.sh --with-agent-board   # also load the subagent board mod (written to env.CLAUDE_CODE_PLUGIN_DIRS in settings.json)
-bash install.sh --with-reply-detail  # also load the details button and reply format mod (same mechanism)
+bash install.sh --with-reply-detail  # also load the reply format mod (same mechanism)
 ```
 
 Notes:
@@ -279,7 +279,7 @@ smart-agent-route/
 │   ├── hooks/                        ← SessionStart injection, context-length reminder
 │   (templates are in skills/route-setup/templates/: MEMORY.md, knowledge-base guide, Explore, Haiku-layer example)
 ├── plugins/agent-board/              ← subagent board mod (optional)
-├── plugins/reply-detail/             ← details button and reply format mod (optional)
+├── plugins/reply-detail/             ← reply format mod (optional)
 ├── docs/
 │   ├── spec.md                       ← architecture design and implementation appendix (Traditional Chinese)
 │   └── ...                           ← deployment and publishing notes (Traditional Chinese only)
@@ -291,7 +291,7 @@ smart-agent-route/
 
 ## Status
 
-**v0.8.0, early version.** Versions up to 0.7.0 were named tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board and the button under the reply; persistent mode, the button in the board, and the reply-format injection are still being validated.
+**v0.8.0, early version.** Versions up to 0.7.0 were named tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board; persistent mode, the button in the board, and the reply-format injection are still being validated.
 
 Known rough edges:
 

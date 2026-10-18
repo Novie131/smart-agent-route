@@ -163,13 +163,13 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒
 | mod | 做什麼 |
 |---|---|
 | `agent-board` | 常駐面板列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額（API 牌價），上方顯示合計。可以縮小成一行摘要，用 `/agent-board` 開關；底部有「▸ 詳細說明」按鈕 |
-| `reply-detail` | 在 system prompt 注入回覆格式：預設精簡三段（現況／你要做的／需要你決定或提供），只對主對話生效。最後一則回覆底下有「▸ 詳細說明」按鈕，按下會把上一則改寫成詳細版；也可以直接輸入「詳細說明」 |
+| `reply-detail` | 在 system prompt 注入回覆格式：預設精簡三段（現況／你要做的／需要你決定或提供），只對主對話生效。要細節時按看板上的「▸ 詳細說明」，或直接輸入「詳細說明」，就會把上一則改寫成詳細版 |
 
 安裝：用 plugin 市集的話是 `/plugin install agent-board@smart-agent-route`、`/plugin install reply-detail@smart-agent-route`；用 install.sh 的話加 `--with-agent-board`、`--with-reply-detail`（VS Code 不能帶 `--plugin-dir`，腳本會把目錄加進 `settings.json` 的 `env.CLAUDE_CODE_PLUGIN_DIRS`）。裝完在 VS Code 執行 Developer: Reload Window。
 
 agent-board 的設定（plugin 的 userConfig，預設都開）：`autoOpen` 子 agent 啟動時自動開面板、`persistent` 對話一開始就開且不自動收起、`detailButton` 看板底部的詳細說明按鈕。
 
-限制：mod 不能在 VS Code 輸入框的工具列（模型選單那一排）加按鈕，也畫不到輸入框上方的橫條（只支援終端機與桌面版），所以按鈕放在回覆底下和看板裡。另外，Claude Code 對不是使用者自己打開的面板有寬度門檻（沒手動開過要 144 欄），VS Code 聊天面板常常不夠寬，面板會停在看不見的「未放置」狀態；常駐模式會在畫面重連、寬度改變、回合開始與結束時檢查並補開。
+限制：mod 不能在 VS Code 輸入框的工具列（模型選單那一排）加按鈕，所以「▸ 詳細說明」按鈕放在看板裡。按鈕也能畫在回覆訊息底下，但 VS Code 會替 mod 畫的訊息加上外框和「From the … plugin」標籤（mod 關不掉），所以不採用。另外，Claude Code 對不是使用者自己打開的面板有寬度門檻（沒手動開過要 144 欄），VS Code 聊天面板常常不夠寬，面板會停在看不見的「未放置」狀態；常駐模式會在畫面重連、寬度改變、回合開始與結束時檢查並補開。
 
 ### 看固定成本
 
@@ -252,7 +252,7 @@ bash install.sh --uninstall        # 移除(依安裝清單,不動你自己的�
 bash install.sh --with-explore     # 另外安裝 Haiku 版 Explore 到 ~/.claude/agents/
 bash install.sh --with-statusline  # 另外在 ~/.claude/settings.json 加 context 狀態列
 bash install.sh --with-agent-board   # 另外載入子 agent 看板 mod(寫入 settings.json 的 env.CLAUDE_CODE_PLUGIN_DIRS)
-bash install.sh --with-reply-detail  # 另外載入詳細說明按鈕與回覆格式 mod(同上)
+bash install.sh --with-reply-detail  # 另外載入回覆格式 mod(同上)
 ```
 
 注意事項：
@@ -279,7 +279,7 @@ smart-agent-route/
 │   ├── hooks/                        ← SessionStart 帶入、context 長度提醒
 │   （範本在 skills/route-setup/templates/：MEMORY.md、知識庫說明、Explore、Haiku 層範本）
 ├── plugins/agent-board/              ← 子 agent 看板 mod（選裝）
-├── plugins/reply-detail/             ← 詳細說明按鈕與回覆格式 mod（選裝）
+├── plugins/reply-detail/             ← 回覆格式 mod（選裝）
 ├── docs/
 │   ├── spec.md                       ← 架構設計與實作附錄
 │   ├── 部署安裝.md
@@ -292,7 +292,7 @@ smart-agent-route/
 
 ## 狀態
 
-**v0.8.0 — 早期版本。** 0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-tiered-agents070-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板和回覆底下的按鈕；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。
+**v0.8.0 — 早期版本。** 0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-tiered-agents070-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。
 
 已知會需要調整的地方：
 

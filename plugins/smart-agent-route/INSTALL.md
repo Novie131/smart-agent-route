@@ -66,7 +66,7 @@ bash install.sh
 
 ### 詳細說明按鈕與回覆格式（選用）
 
-加 `--with-reply-detail`（限制、`--link`／複製模式、`--uninstall` 的處理全部同 `--with-agent-board`，可與它同時使用）。這個 mod（`plugins/reply-detail`）會在最後一則助理回覆底下畫「▸ 詳細說明」按鈕，按下後要求把上一則回覆改寫成詳細版；同時在 system prompt 注入「精簡版三段式（現況／你要做的／需要你決定／提供）」的回覆格式規則（只對主對話生效，子 agent 忽略）。一樣靠 `env.CLAUDE_CODE_PLUGIN_DIRS` 載入：`--link` 時路徑指向 repo 內的 `plugins/reply-detail`；複製模式則先複製到 `~/.claude/smart-agent-route/reply-detail/`（記入安裝清單）再指向那裡；從 `.plugin` 封包安裝時不含它，會略過。`--uninstall` 只移除本腳本加的這條路徑。裝完，VS Code 執行 Developer: Reload Window、終端機重開 `claude` 才會載入。用 plugin 市集安裝的人改用 `/plugin install reply-detail@smart-agent-route`。
+加 `--with-reply-detail`（限制、`--link`／複製模式、`--uninstall` 的處理全部同 `--with-agent-board`，可與它同時使用）。這個 mod（`plugins/reply-detail`）會在 system prompt 注入「精簡版三段式（現況／你要做的／需要你決定／提供）」的回覆格式規則（只對主對話生效，子 agent 忽略）。輸入「詳細說明」或按 agent-board 看板上的「▸ 詳細說明」按鈕，就會把上一則回覆改寫成詳細版。它不在回覆底下畫按鈕，因為 VS Code 會替 mod 畫的訊息加上外框與標籤。一樣靠 `env.CLAUDE_CODE_PLUGIN_DIRS` 載入：`--link` 時路徑指向 repo 內的 `plugins/reply-detail`；複製模式則先複製到 `~/.claude/smart-agent-route/reply-detail/`（記入安裝清單）再指向那裡；從 `.plugin` 封包安裝時不含它，會略過。`--uninstall` 只移除本腳本加的這條路徑。裝完，VS Code 執行 Developer: Reload Window、終端機重開 `claude` 才會載入。用 plugin 市集安裝的人改用 `/plugin install reply-detail@smart-agent-route`。
 
 ### 驗證
 
