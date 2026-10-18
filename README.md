@@ -17,7 +17,7 @@
 - **記憶跨對話累積**：記憶就是一般的 Markdown 檔，可以進 git、用 Obsidian 開；查外部資料時附上來源。
 - **效果量得到**：`usage-stats` 可以量出主對話 context 長度、每個 agent 用了多少 token、依 API 牌價估算的金額，也能輸出一份有每日圖表的 HTML 報表。
 - **看得到子 agent 在做什麼**（選裝）：`agent-board` 看板常駐在輸入框上方，即時列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額。
-- **回覆一眼看懂**（選裝）：`reply-detail` 讓回覆預設只講現況、你要做的、需要你決定的事；要細節時按「▸ 詳細說明」。
+- **回覆一眼看懂**（選裝）：`reply-detail` 讓回覆預設只講現況、你要做的、需要你決定的事；要細節時按「▸ 詳細說明」，或用看板的切換鍵讓之後每則都寫詳細版。
 
 ---
 
@@ -162,14 +162,14 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒
 
 | mod | 做什麼 |
 |---|---|
-| `agent-board` | 常駐面板列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額（API 牌價），上方顯示合計。可以縮小成一行摘要，用 `/agent-board` 開關；底部有「▸ 詳細說明」按鈕 |
-| `reply-detail` | 在 system prompt 注入回覆格式：預設精簡三段（現況／你要做的／需要你決定或提供），只對主對話生效。要細節時按看板上的「▸ 詳細說明」，或直接輸入「詳細說明」，就會把上一則改寫成詳細版 |
+| `agent-board` | 常駐面板列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額（API 牌價），上方顯示合計。可以縮小成一行摘要，用 `/agent-board` 開關；底部有「⇄ 回覆：精簡／詳細」切換鍵與「▸ 詳細說明」按鈕 |
+| `reply-detail` | 在 system prompt 注入回覆格式：預設精簡三段（現況／你要做的／需要你決定或提供），只對主對話生效。要細節時按看板上的「▸ 詳細說明」，或直接輸入「詳細說明」，就會把上一則改寫成詳細版；看板的切換鍵切到「詳細」後，之後每則回覆都是詳細版，直到切回精簡 |
 
 安裝：用 plugin 市集的話是 `/plugin install agent-board@smart-agent-route`、`/plugin install reply-detail@smart-agent-route`；用 install.sh 的話加 `--with-agent-board`、`--with-reply-detail`（VS Code 不能帶 `--plugin-dir`，腳本會把目錄加進 `settings.json` 的 `env.CLAUDE_CODE_PLUGIN_DIRS`）。裝完在 VS Code 執行 Developer: Reload Window。
 
-agent-board 的設定（plugin 的 userConfig，預設都開）：`autoOpen` 子 agent 啟動時自動開面板、`persistent` 對話一開始就開且不自動收起、`detailButton` 看板底部的詳細說明按鈕。
+agent-board 的設定（plugin 的 userConfig，預設都開）：`autoOpen` 子 agent 啟動時自動開面板、`persistent` 對話一開始就開且不自動收起、`detailButton` 看板底部的回覆模式切換鍵與詳細說明按鈕。切換鍵切到詳細時，看板會在你送出的每則訊息附上「這一輪寫詳細版」的要求；reload 後回到精簡。
 
-限制：mod 不能在 VS Code 輸入框的工具列（模型選單那一排）加按鈕，所以「▸ 詳細說明」按鈕放在看板裡。按鈕也能畫在回覆訊息底下，但 VS Code 會替 mod 畫的訊息加上外框和「From the … plugin」標籤（mod 關不掉），所以不採用。另外，Claude Code 對不是使用者自己打開的面板有寬度門檻（沒手動開過要 144 欄），VS Code 聊天面板常常不夠寬，面板會停在看不見的「未放置」狀態；常駐模式會在畫面重連、寬度改變、回合開始與結束時檢查並補開。
+限制：mod 不能在 VS Code 輸入框的工具列（模型選單那一排）加按鈕，所以切換鍵與「▸ 詳細說明」按鈕放在看板裡。回覆訊息底下和輸入框上方的橫條也能放，但 VS Code 會替 mod 畫的這些區塊加上外框和「From the … plugin」標籤（mod 關不掉），所以不採用。另外，Claude Code 對不是使用者自己打開的面板有寬度門檻（沒手動開過要 144 欄），VS Code 聊天面板常常不夠寬，面板會停在看不見的「未放置」狀態；常駐模式會在畫面重連、寬度改變、回合開始與結束時檢查並補開。
 
 ### 看固定成本
 

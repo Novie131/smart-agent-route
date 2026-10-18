@@ -1,8 +1,10 @@
 {
   "name": "agent-board",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "在 Claude Code 聊天面板即時顯示子 agent 狀態的看板（試作版）。",
-  "author": { "name": "Novie131" },
+  "author": {
+    "name": "Novie131"
+  },
   "userConfig": {
     "autoOpen": {
       "type": "boolean",
@@ -18,8 +20,8 @@
     },
     "detailButton": {
       "type": "boolean",
-      "title": "詳細說明按鈕",
-      "description": "看板底部加「▸ 詳細說明」按鈕，按下後要求把上一則回覆改寫成詳細版。",
+      "title": "回覆模式與詳細說明按鈕",
+      "description": "看板底部加「⇄ 回覆：精簡／詳細」切換鍵（切到詳細後每則回覆都寫詳細版）與「▸ 詳細說明」按鈕（把上一則回覆改寫成詳細版）。",
       "default": true
     }
   }

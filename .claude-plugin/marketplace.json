@@ -18,7 +18,7 @@
       "name": "agent-board",
       "source": "./plugins/agent-board",
       "description": "在 Claude Code 聊天面板即時顯示子 agent 狀態的看板（試作版）。",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "Novie131"
       }
@@ -27,7 +27,7 @@
       "name": "reply-detail",
       "source": "./plugins/reply-detail",
       "description": "注入精簡版三段式回覆格式規則；輸入「詳細說明」或按 agent-board 看板上的按鈕改寫成詳細版。",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "Novie131"
       }

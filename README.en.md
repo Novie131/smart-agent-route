@@ -17,7 +17,7 @@ The Traditional Chinese docs are the primary version; this English version is a 
 - **Memory that accumulates across conversations**: memory is plain Markdown files you can put in git or open in Obsidian; external information is saved with its source.
 - **Measurable**: `usage-stats` measures main-conversation context length, how many tokens each agent used, and an estimated cost at API list prices, and can write an HTML report with daily charts.
 - **See what subagents are doing** (optional): the `agent-board` panel stays above the prompt and shows each subagent's type, model, status, elapsed time, tokens, and estimated cost as it runs.
-- **Replies you can read at a glance** (optional): `reply-detail` makes replies lead with the current state, what you need to do, and what you need to decide; press "▸ 詳細說明" (details) when you want the full version.
+- **Replies you can read at a glance** (optional): `reply-detail` makes replies lead with the current state, what you need to do, and what you need to decide; press "▸ 詳細說明" (details) when you want the full version, or switch the board to detailed mode for every reply.
 
 ---
 
@@ -162,14 +162,14 @@ Two optional mods (Claude Code interface extensions; they need 2.1.299 or later 
 
 | mod | What it does |
 |---|---|
-| `agent-board` | A persistent panel listing each subagent's type, model, status, elapsed time, tokens, and estimated cost (API list prices), with totals at the top. It collapses to a one-line summary and toggles with `/agent-board`; a "▸ 詳細說明" (details) button sits at the bottom |
-| `reply-detail` | Injects a reply format into the system prompt: by default a short three-part reply (current state / what you need to do / what you need to decide or provide), for the main conversation only. Press "▸ 詳細說明" (details) on the board, or type "詳細說明", to get a detailed rewrite of the previous reply |
+| `agent-board` | A persistent panel listing each subagent's type, model, status, elapsed time, tokens, and estimated cost (API list prices), with totals at the top. It collapses to a one-line summary and toggles with `/agent-board`; a reply-mode switch ("⇄ 回覆：精簡／詳細", concise/detailed) and a "▸ 詳細說明" (details) button sit at the bottom |
+| `reply-detail` | Injects a reply format into the system prompt: by default a short three-part reply (current state / what you need to do / what you need to decide or provide), for the main conversation only. Press "▸ 詳細說明" (details) on the board, or type "詳細說明", to get a detailed rewrite of the previous reply; switch the board's reply mode to detailed and every reply stays detailed until you switch back |
 
 Install: from the plugin marketplace, `/plugin install agent-board@smart-agent-route` and `/plugin install reply-detail@smart-agent-route`; with install.sh, add `--with-agent-board` and `--with-reply-detail` (VS Code cannot pass `--plugin-dir`, so the script adds the folders to `env.CLAUDE_CODE_PLUGIN_DIRS` in `settings.json`). Afterwards, run Developer: Reload Window in VS Code.
 
-agent-board settings (plugin userConfig, all on by default): `autoOpen` opens the panel when a subagent starts, `persistent` opens it when the session starts and keeps it open, `detailButton` shows the details button at the bottom.
+agent-board settings (plugin userConfig, all on by default): `autoOpen` opens the panel when a subagent starts, `persistent` opens it when the session starts and keeps it open, `detailButton` shows the reply-mode switch and the details button at the bottom. In detailed mode the board attaches a "write this turn in detail" request to every message you send; a reload resets it to concise.
 
-Limits: a mod cannot add buttons to the VS Code prompt toolbar (the row with the model picker), so the "▸ 詳細說明" button lives in the board. The button could also be drawn under the reply, but VS Code wraps any message a mod draws in a frame labeled "From the … plugin" (a mod cannot turn it off), so that is not used. Also, Claude Code applies a width threshold to panes the user did not open (144 columns if never opened by hand), which the VS Code chat panel often falls short of, leaving the pane invisible and "unplaced"; persistent mode checks and reopens it when a surface attaches, the width changes, and a turn starts or ends.
+Limits: a mod cannot add buttons to the VS Code prompt toolbar (the row with the model picker), so the switch and the "▸ 詳細說明" button live in the board. They could also go under the reply or in the band above the prompt, but VS Code wraps those mod-drawn areas in a frame labeled "From the … plugin" (a mod cannot turn it off), so they are not used. Also, Claude Code applies a width threshold to panes the user did not open (144 columns if never opened by hand), which the VS Code chat panel often falls short of, leaving the pane invisible and "unplaced"; persistent mode checks and reopens it when a surface attaches, the width changes, and a turn starts or ends.
 
 ### Checking the fixed cost
 

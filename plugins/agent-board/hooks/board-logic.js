@@ -16,13 +16,23 @@ export function shouldAutoOpen(options) {
   return !options || options.autoOpen !== false
 }
 
-// options.detailButton 預設 true：看板底部顯示「▸ 詳細說明」按鈕
+// options.detailButton 預設 true：看板底部顯示回覆模式切換鍵與「▸ 詳細說明」按鈕
 export function showDetailButton(options) {
   return !options || options.detailButton !== false
 }
 
 // 按下「▸ 詳細說明」時代使用者送出的訊息；reply-detail 的回覆格式規則認得「詳細說明」開頭的訊息
 export const DETAIL_PROMPT = '詳細說明：把上一則回覆改寫成詳細版（背景、做了什麼、證據與檔案位置、取捨與風險）'
+
+// 回覆模式切到「詳細」時，附在每則使用者訊息後面的要求（prompt.submit 的 context，每輪都會送出）。
+// 不用 prompt.compose：2.1.301 實測 session 段落只在第一輪生效，之後改了也不會送出
+export const DETAIL_MODE_CONTEXT =
+  '回覆模式：詳細（使用者在看板切換）：這一輪結束的回覆不用精簡版三段式，直接寫詳細版：背景、做了什麼、證據與檔案位置、取捨與風險。'
+
+// 看板上回覆模式切換鍵的文字：顯示目前模式，按下切到另一個
+export function replyModeLabel(mode) {
+  return mode === 'detail' ? '⇄ 回覆：詳細' : '⇄ 回覆：精簡'
+}
 
 // options.persistent 預設 true：session 開始就開面板，turn.start 不收起
 export function shouldStayOpen(options) {

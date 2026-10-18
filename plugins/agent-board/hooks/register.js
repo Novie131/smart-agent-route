@@ -8,6 +8,8 @@ import {
   shouldStayOpen,
   showDetailButton,
   DETAIL_PROMPT,
+  DETAIL_MODE_CONTEXT,
+  replyModeLabel,
   sortAgents,
   summarizeUsage,
   collapsedLabel,
@@ -27,6 +29,8 @@ const usageByAgent = new Map()
 const metaByAgent = new Map()
 // 使用者用 /agent-board 關掉後，常駐模式就不再自動重開，直到再用 /agent-board 打開
 let userClosed = false
+// 回覆模式：'concise'（預設，照 reply-detail 的精簡版）或 'detail'（每則回覆都寫詳細版）；reload 後回到精簡
+let replyMode = 'concise'
 
 // 面板要真的放上畫面才算開著：$.ui.panes() 也會列出等待放置（isPlaced: false）的面板
 async function isShown($) {
@@ -160,6 +164,12 @@ export function register(on, options) {
     return result
   })
 
+  // 回覆模式為詳細時，在使用者送出的訊息附上詳細版要求；系統產生的訊息（isMeta）不動
+  on('prompt.submit', async ($, e, next) => {
+    if (replyMode !== 'detail' || e.isMeta) return next(e)
+    return next({ ...e, context: [...(e.context || []), DETAIL_MODE_CONTEXT] })
+  })
+
   // /agent-board：開關面板，自己處理完不呼叫 next。
   // 用 isPlaced 判斷：看不見的面板也在清單裡，只看 id 會把它當成開著而關掉
   on('command.run', { command: 'agent-board' }, async ($) => {
@@ -183,10 +193,19 @@ export function register(on, options) {
       collapsed = !collapsed
       $.ui.invalidate('ui.render')
     }
-    // 底部按鈕列：縮小／展開，加上可關掉的「▸ 詳細說明」
-    const detail = showDetailButton(options)
-      ? [Button({ key: 'detail', label: '▸ 詳細說明', onPress: () => $.prompt.submit({ text: DETAIL_PROMPT, asUser: true }) })]
-      : []
+    // 底部按鈕列：縮小／展開，加上可關掉的回覆模式切換鍵與「▸ 詳細說明」（詳細模式下每則都是詳細版，不需要單次按鈕）
+    const switchMode = () => {
+      replyMode = replyMode === 'detail' ? 'concise' : 'detail'
+      $.ui.invalidate('ui.render')
+    }
+    const detail = !showDetailButton(options)
+      ? []
+      : [
+          Button({ key: 'mode', label: replyModeLabel(replyMode), onPress: switchMode }),
+          ...(replyMode === 'detail'
+            ? []
+            : [Button({ key: 'detail', label: '▸ 詳細說明', onPress: () => $.prompt.submit({ text: DETAIL_PROMPT, asUser: true }) })]),
+        ]
     const buttonRow = (first) => Box({ flexDirection: 'row', gap: 1, children: [first, ...detail] })
     if (collapsed) {
       return Box({
