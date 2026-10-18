@@ -16,13 +16,10 @@ export function shouldAutoOpen(options) {
   return !options || options.autoOpen !== false
 }
 
-// options.detailButton 預設 true：看板底部顯示回覆模式切換鍵與「▸ 詳細說明」按鈕
+// options.detailButton 預設 true：看板底部顯示回覆模式切換鍵（設定名稱沿用舊版，避免已設定的人失效）
 export function showDetailButton(options) {
   return !options || options.detailButton !== false
 }
-
-// 按下「▸ 詳細說明」時代使用者送出的訊息；reply-detail 的回覆格式規則認得「詳細說明」開頭的訊息
-export const DETAIL_PROMPT = '詳細說明：把上一則回覆改寫成詳細版（背景、做了什麼、證據與檔案位置、取捨與風險）'
 
 // 回覆模式切到「詳細」時，附在每則使用者訊息後面的要求（prompt.submit 的 context，每輪都會送出）。
 // 不用 prompt.compose：2.1.301 實測 session 段落只在第一輪生效，之後改了也不會送出

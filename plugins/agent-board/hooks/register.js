@@ -7,7 +7,6 @@ import {
   shouldAutoOpen,
   shouldStayOpen,
   showDetailButton,
-  DETAIL_PROMPT,
   DETAIL_MODE_CONTEXT,
   replyModeLabel,
   sortAgents,
@@ -193,19 +192,14 @@ export function register(on, options) {
       collapsed = !collapsed
       $.ui.invalidate('ui.render')
     }
-    // 底部按鈕列：縮小／展開，加上可關掉的回覆模式切換鍵與「▸ 詳細說明」（詳細模式下每則都是詳細版，不需要單次按鈕）
+    // 底部按鈕列：縮小／展開，加上可關掉的回覆模式切換鍵
     const switchMode = () => {
       replyMode = replyMode === 'detail' ? 'concise' : 'detail'
       $.ui.invalidate('ui.render')
     }
     const detail = !showDetailButton(options)
       ? []
-      : [
-          Button({ key: 'mode', label: replyModeLabel(replyMode), onPress: switchMode }),
-          ...(replyMode === 'detail'
-            ? []
-            : [Button({ key: 'detail', label: '▸ 詳細說明', onPress: () => $.prompt.submit({ text: DETAIL_PROMPT, asUser: true }) })]),
-        ]
+      : [Button({ key: 'mode', label: replyModeLabel(replyMode), onPress: switchMode })]
     const buttonRow = (first) => Box({ flexDirection: 'row', gap: 1, children: [first, ...detail] })
     if (collapsed) {
       return Box({

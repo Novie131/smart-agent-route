@@ -17,7 +17,7 @@
 #                                   ~/.claude/smart-agent-route/agent-board/(記入安裝清單)再指向那裡。
 #                                   只碰 env.CLAUDE_CODE_PLUGIN_DIRS 這一個變數(已含則不重複);備份與壞 JSON 的處理同 --with-statusline。
 #                                   --uninstall 會把本腳本加的路徑從該變數移除。用 plugin 市集裝的人不需要這個旗標。
-#   bash install.sh --with-reply-detail  另外把 plugins/reply-detail(「▸ 詳細說明」按鈕與回覆格式規則 mod)的目錄加進
+#   bash install.sh --with-reply-detail  另外把 plugins/reply-detail(回覆格式規則 mod)的目錄加進
 #                                   env.CLAUDE_CODE_PLUGIN_DIRS;行為、限制、--link／複製模式與 --uninstall 的處理全部同 --with-agent-board
 #                                   (複製模式的目的地是 ~/.claude/smart-agent-route/reply-detail/)。兩個旗標可同時使用。
 #

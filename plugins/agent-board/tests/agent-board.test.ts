@@ -12,7 +12,6 @@ import {
   shouldAutoOpen,
   shouldStayOpen,
   showDetailButton,
-  DETAIL_PROMPT,
   DETAIL_MODE_CONTEXT,
   replyModeLabel,
   sortAgents,
@@ -245,28 +244,7 @@ test('turn.step：usage 為 null 不出錯，結果原樣', async ($, on) => {
   expect(r.answer).toBe('ok')
 })
 
-test('看板的「▸ 詳細說明」按鈕會代使用者送出詳細說明訊息', async ($, on) => {
-  setup($, on, () => [])
-  const submitted: any[] = []
-  on('prompt.submit', ($: any, e: any) => { submitted.push(e); return { text: e.text } })
-  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
-  const ui = await $.ui.mount({
-    plugin: 'agent-board', component: 'Pane', requestId: 'agent-board', surface: 'terminal',
-    viewport: { columns: 100, rows: 30 },
-    props: { title: '子 agent', isFocused: true, bodyColumns: 80, placement: 'inline', scroll: { offset: 0, bodyRows: 12 }, view: {} },
-  } as any)
-  await ui.press({ key: 'detail' })
-  expect(submitted.at(-1)?.text).toBe(DETAIL_PROMPT)
-  expect(submitted.at(-1)?.origin?.asUser).toBe(true)
-  // 縮小後按鈕仍在
-  await ui.press({ key: 'collapse' })
-  expect(await ui.find({ key: 'detail' })).toBeDefined()
-  await ui.unmount()
-  expect(showDetailButton({ detailButton: false })).toBe(false)
-  expect(showDetailButton({})).toBe(true)
-})
-
-test('回覆模式切換鍵：切到詳細後每則使用者訊息都附上詳細版要求，單次按鈕隱藏；切回精簡就不附', async ($, on) => {
+test('回覆模式切換鍵：切到詳細後每則使用者訊息都附上詳細版要求；切回精簡就不附；縮小後仍在；可關掉', async ($, on) => {
   setup($, on, () => [])
   const submitted: any[] = []
   on('prompt.submit', ($: any, e: any) => { submitted.push(e); return { text: e.text } })
@@ -282,15 +260,19 @@ test('回覆模式切換鍵：切到詳細後每則使用者訊息都附上詳�
 
   await ui.press({ key: 'mode' })
   expect((await ui.find({ key: 'mode' }))?.props?.label).toBe(replyModeLabel('detail'))
-  expect(await ui.find({ key: 'detail' })).toBeUndefined()
   await $.prompt.submit({ text: '詳細模式的訊息' })
   expect(submitted.at(-1)?.context).toContain(DETAIL_MODE_CONTEXT)
 
   await ui.press({ key: 'mode' })
-  expect(await ui.find({ key: 'detail' })).toBeDefined()
   await $.prompt.submit({ text: '切回精簡' })
   expect(submitted.at(-1)?.context ?? []).not.toContain(DETAIL_MODE_CONTEXT)
+  // 縮小後切換鍵仍在，也沒有舊的單次「詳細說明」按鈕
+  await ui.press({ key: 'collapse' })
+  expect(await ui.find({ key: 'mode' })).toBeDefined()
+  expect(await ui.find({ key: 'detail' })).toBeUndefined()
   await ui.unmount()
+  expect(showDetailButton({ detailButton: false })).toBe(false)
+  expect(showDetailButton({})).toBe(true)
 })
 
 // 模擬引擎的放置：placed=false 時 ui.open 只會讓面板等待放置（isPlaced: false）
